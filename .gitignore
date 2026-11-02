@@ -1,0 +1,35 @@
+# Arquivos confidenciais, documentos judiciais e imagens
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.webp
+
+# Chaves e Configurações sensíveis
+config.json
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Banco de dados local e histórico
+*.db
+historico.db
+
+# Python & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Ambientes virtuais
+venv/
+.venv/
+env/
+
+# IDEs e Sistema Operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
