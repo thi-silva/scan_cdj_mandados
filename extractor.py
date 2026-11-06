@@ -34,12 +34,17 @@ Retorne APENAS um JSON válido no formato:
 }
 """
 
-def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gemini-3.5-flash-lite") -> Dict[str, Any]:
+def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gemini-2.5-flash") -> Dict[str, Any]:
     """
     Analisa a imagem utilizando a biblioteca oficial google-genai
     """
     if not api_key:
         raise ValueError("Chave de API do Gemini não configurada. Configure em Configurações.")
+
+    # Corrige nomes de modelos legados/inválidos caso estejam salvos no config.json
+    valid_models = {"gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"}
+    if model_name not in valid_models:
+        model_name = "gemini-2.5-flash"
 
     from google import genai
     from PIL import Image
@@ -79,10 +84,10 @@ def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gem
         return data
 
     except Exception as e:
-        # Tenta com gemini-3.8-flash caso o modelo falhe
-        if model_name != "gemini-3.8-flash":
-            print(f"[Aviso] Tentando fallback para gemini-3.8-flash: {e}")
-            return extract_with_gemini(image_bytes, api_key, model_name="gemini-3.8-flash")
+        # Tenta com gemini-2.5-flash-lite caso o modelo principal falhe
+        if model_name != "gemini-2.5-flash-lite":
+            print(f"[Aviso] Tentando fallback para gemini-2.5-flash-lite: {e}")
+            return extract_with_gemini(image_bytes, api_key, model_name="gemini-2.5-flash-lite")
         raise RuntimeError(f"Erro ao analisar com Gemini: {str(e)}")
 
 def prepare_image(image_input) -> bytes:

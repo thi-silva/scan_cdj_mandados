@@ -94,10 +94,16 @@
         </div>
 
         <!-- BOTÃO PRINCIPAL DE CAPTURA -->
-        <div class="capture-actions">
+        <div class="capture-actions" style="display: flex; flex-direction: column; gap: 0.6rem;">
           <button class="btn-capture" id="btnCapture">
             <span class="capture-icon">📸</span>
-            <span id="btnCaptureText">Escanear Documento</span>
+            <span id="btnCaptureText">Capturar da Câmera Ao Vivo</span>
+          </button>
+
+          <!-- CAPTURA NATIVA PARA CELULAR / TABLET (FUNCIONA MESMO EM HTTP LOCAL) -->
+          <input type="file" id="mobileCameraInput" accept="image/*" capture="environment" style="display: none;">
+          <button class="btn btn-secondary" id="btnMobileCamera" type="button" style="width: 100%; justify-content: center; padding: 0.75rem; font-weight: 600; border-color: rgba(59, 130, 246, 0.4);">
+            📱 Tirar Foto com Câmera do Celular (Alta Nitidez)
           </button>
         </div>
 
@@ -319,8 +325,9 @@
           <div class="form-group" style="margin-bottom: 1.25rem;">
             <label class="form-label">MODELO DE IA</label>
             <select id="cfgModelName" class="form-input">
-              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Recomendado - Ultrarrápido e Preciso)</option>
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash (Alta Capacidade)</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Alta Precisão para Carimbos)</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Ultrarrápido)</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
             </select>
           </div>
 

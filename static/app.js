@@ -104,6 +104,8 @@ const DOM = {
   btnCapture: document.getElementById('btnCapture'),
   btnCaptureText: document.getElementById('btnCaptureText'),
   btnSwitchCamera: document.getElementById('btnSwitchCamera'),
+  btnMobileCamera: document.getElementById('btnMobileCamera'),
+  mobileCameraInput: document.getElementById('mobileCameraInput'),
   fileInput: document.getElementById('fileInput'),
   dropzone: document.getElementById('dropzone'),
   
@@ -190,6 +192,12 @@ async function initCamera(deviceId = null) {
 
     if (deviceId) {
       constraints.video.deviceId = { exact: deviceId };
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      DOM.cameraStatus.textContent = 'Modo Celular (Use o botão "Tirar Foto com Câmera do Celular" abaixo)';
+      DOM.cameraSelect.innerHTML = '<option value="">Use o botão 📱 abaixo no celular</option>';
+      return;
     }
 
     DOM.cameraStatus.textContent = 'Conectando câmera...';
@@ -587,9 +595,24 @@ function closeSettingsModal() {
 
 // EVENT LISTENERS
 DOM.btnCapture.addEventListener('click', () => {
+  if (!state.currentStream) {
+    // Se não houver stream de vídeo ativo (ex: celular via HTTP), abre a câmera nativa do aparelho
+    DOM.mobileCameraInput.click();
+    return;
+  }
   const frameBase64 = captureFrameAsBase64();
   analyzeImage(frameBase64);
 });
+
+if (DOM.btnMobileCamera && DOM.mobileCameraInput) {
+  DOM.btnMobileCamera.addEventListener('click', () => DOM.mobileCameraInput.click());
+  DOM.mobileCameraInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      handleFileUpload(e.target.files[0]);
+      e.target.value = '';
+    }
+  });
+}
 
 DOM.cameraSelect.addEventListener('change', (e) => {
   initCamera(e.target.value);

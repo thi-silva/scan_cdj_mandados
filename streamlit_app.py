@@ -57,7 +57,7 @@ def get_secret_or_cfg(secret_key: str, cfg_key: str, default: str = "") -> str:
 gemini_key = get_secret_or_cfg("GEMINI_API_KEY", "gemini_api_key")
 webhook_url = get_secret_or_cfg("WEBHOOK_URL", "webhook_url")
 spreadsheet_url = get_secret_or_cfg("SPREADSHEET_URL", "spreadsheet_url")
-model_name = "gemini-3.5-flash-lite"
+model_name = "gemini-2.5-flash"
 
 # BARRA LATERAL: CONFIGURAÇÕES
 with st.sidebar:

@@ -62,7 +62,7 @@ def get_current_config():
         "masked_gemini_key": masked_key,
         "webhook_url": cfg.get("webhook_url", ""),
         "spreadsheet_url": cfg.get("spreadsheet_url", ""),
-        "model_name": cfg.get("model_name", "gemini-3.5-flash-lite")
+        "model_name": cfg.get("model_name", "gemini-2.5-flash")
     }
 
 @app.post("/api/config")
@@ -93,7 +93,7 @@ def analyze_image_base64(req: AnalyzeBase64Request):
 
     try:
         jpeg_bytes = prepare_image(req.image)
-        extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-3.5-flash-lite"))
+        extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-2.5-flash"))
         
         # Cria thumbnail miniatura para histórico (max 200px)
         preview_base64 = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes[:100000]).decode("utf-8")
@@ -147,7 +147,7 @@ async def upload_and_analyze(file: UploadFile = File(...)):
         jpeg_bytes = content
 
     jpeg_bytes = prepare_image(jpeg_bytes)
-    extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-3.5-flash-lite"))
+    extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-2.5-flash"))
 
     scan_id = save_scan({
         "numero_processo": extracted.get("numero_processo", ""),
