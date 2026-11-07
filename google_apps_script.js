@@ -22,7 +22,7 @@
  */
 
 // Nome da aba de destino específica na sua planilha
-var NOME_DA_ABA = "test_scan_cdj"; 
+var NOME_DA_ABA = "test_scan_cdj";
 
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
@@ -49,18 +49,12 @@ function doPost(e) {
       sheet = ss.insertSheet(targetSheetName);
     }
 
-    // Se a planilha estiver vazia, cria o cabeçalho automaticamente com formatação visual
+    // Se a planilha estiver vazia, cria o cabeçalho automaticamente nas 3 colunas definidas
     if (sheet.getLastRow() === 0) {
       var cabecalho = [
-        "Data/Hora Registro",
-        "Número do Processo",
-        "Data de Recebimento",
-        "Hora Recebimento",
-        "Responsável / Matrícula",
-        "Demandante (Autor)",
-        "Demandado (Réu)",
-        "Tipo de Documento",
-        "Vara / Comarca"
+        "Data de Autuação",
+        "Processo Judicial",
+        "Observações"
       ];
       sheet.appendRow(cabecalho);
       var headerRange = sheet.getRange(1, 1, 1, cabecalho.length);
@@ -71,32 +65,29 @@ function doPost(e) {
       sheet.setFrozenRows(1);
     }
 
-    var agora = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
-
+    // Ordem estrita de preenchimento:
+    // 1. Data de Autuação (data do recebimento no carimbo)
+    // 2. Processo Judicial (número do processo)
+    // 3. Observações (pessoa que recebe no carimbo)
     var novaLinha = [
-      agora,
-      data.numero_processo || "-",
-      data.data_recebimento || "-",
-      data.hora_recebimento || "-",
-      data.responsavel || "-",
-      data.demandante || "-",
-      data.demandado || "-",
-      data.tipo_documento || "-",
-      data.vara_comarca || "-"
+      data.data_autuacao || data.data_recebimento || "-",
+      data.processo_judicial || data.numero_processo || "-",
+      data.observacoes || data.responsavel || "-"
     ];
 
     sheet.appendRow(novaLinha);
     var insertedRow = sheet.getLastRow();
 
-    // Formata o número do processo como texto para preservar pontuação e zeros à esquerda
+    // Formata o número do processo (Coluna 2) como texto para preservar pontuação e zeros à esquerda
     sheet.getRange(insertedRow, 2).setNumberFormat("@");
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       message: "Registro gravado com sucesso na planilha!",
       linha_inserida: insertedRow,
-      numero_processo: data.numero_processo,
-      data_recebimento: data.data_recebimento
+      data_autuacao: novaLinha[0],
+      processo_judicial: novaLinha[1],
+      observacoes: novaLinha[2]
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (erro) {

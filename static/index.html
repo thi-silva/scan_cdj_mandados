@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
+
 <body>
 
   <!-- NAVBAR -->
@@ -17,7 +19,7 @@
       <div class="brand-icon">⚖️</div>
       <div class="brand-text">
         <h1>ScanJudicial</h1>
-        <p>Leitor de Mandados, Carimbos e Controle de Processos</p>
+        <p>Leitor de Mandados para preenchimento automático de planilhas</p>
       </div>
     </div>
 
@@ -35,10 +37,7 @@
       </div>
 
       <!-- Link direto para a planilha do usuário (preenchido dinamicamente pelo app.js) -->
-      <a href="#" 
-         target="_blank" 
-         class="btn btn-secondary" 
-         id="btnOpenSpreadsheet">
+      <a href="#" target="_blank" class="btn btn-secondary" id="btnOpenSpreadsheet">
         📊 Abrir Planilha
       </a>
 
@@ -52,7 +51,7 @@
   <!-- CONTEÚDO PRINCIPAL -->
   <main class="main-container">
     <div class="workspace-grid">
-      
+
       <!-- COLUNA DA ESQUERDA: CÂMERA / SCANNER -->
       <section class="glass-card scanner-card">
         <div class="card-header">
@@ -74,7 +73,7 @@
             <div class="frame-corner corner-tr"></div>
             <div class="frame-corner corner-bl"></div>
             <div class="frame-corner corner-br"></div>
-            
+
             <div class="scan-laser-line" id="laserLine"></div>
 
             <div class="frame-guidelines">
@@ -102,7 +101,8 @@
 
           <!-- CAPTURA NATIVA PARA CELULAR / TABLET (FUNCIONA MESMO EM HTTP LOCAL) -->
           <input type="file" id="mobileCameraInput" accept="image/*" capture="environment" style="display: none;">
-          <button class="btn btn-secondary" id="btnMobileCamera" type="button" style="width: 100%; justify-content: center; padding: 0.75rem; font-weight: 600; border-color: rgba(59, 130, 246, 0.4);">
+          <button class="btn btn-secondary" id="btnMobileCamera" type="button"
+            style="width: 100%; justify-content: center; padding: 0.75rem; font-weight: 600; border-color: rgba(59, 130, 246, 0.4);">
             📱 Tirar Foto com Câmera do Celular (Alta Nitidez)
           </button>
         </div>
@@ -139,88 +139,42 @@
           <img id="capturedImagePreview" src="" alt="Captura do Mandado" style="display: none;">
         </div>
 
-        <!-- FORMULÁRIO EDITÁVEL DOS CAMPOS EXTRAÍDOS -->
+        <!-- FORMULÁRIO EDITÁVEL DOS CAMPOS EXTRAÍDOS (ORDEM: DATA DE AUTUAÇÃO -> PROCESSO JUDICIAL -> OBSERVAÇÕES) -->
         <form id="extractedForm" class="fields-form" onsubmit="return false;">
-          
-          <!-- PROCESSO JUDICIAL (DESTAQUE) -->
+
+          <!-- 1. DATA DE AUTUAÇÃO (DATA DO RECEBIMENTO NO CARIMBO) -->
           <div class="form-group">
             <label class="form-label">
-              <span>NÚMERO DO PROCESSO JUDICIAL</span>
-              <span class="badge">Campo Obrigatório</span>
+              <span>1. DATA DE AUTUAÇÃO (RECEBIMENTO NO CARIMBO)</span>
+              <span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399;">Coluna: Data de Autuação</span>
+            </label>
+            <input type="text" id="fieldDataRecebimento" class="form-input highlight-data" placeholder="DD/MM/AAAA"
+              autocomplete="off">
+          </div>
+
+          <!-- 2. PROCESSO JUDICIAL (NÚMERO DO PROCESSO) -->
+          <div class="form-group">
+            <label class="form-label">
+              <span>2. PROCESSO JUDICIAL (NÚMERO DO PROCESSO)</span>
+              <span class="badge">Coluna: Processo Judicial</span>
             </label>
             <div style="display: flex; gap: 0.5rem;">
-              <input type="text" 
-                     id="fieldProcesso" 
-                     class="form-input highlight-processo" 
-                     placeholder="Ex: 0001234-56.2026.8.00.0001" 
-                     autocomplete="off" 
-                     style="flex: 1;">
+              <input type="text" id="fieldProcesso" class="form-input highlight-processo"
+                placeholder="Ex: 0001234-56.2026.8.00.0001" autocomplete="off" style="flex: 1;">
               <button class="btn btn-secondary" id="btnCopyProcesso" title="Copiar Número do Processo" type="button">
                 📋
               </button>
             </div>
           </div>
 
-          <!-- DATA E HORA DE RECEBIMENTO (CARIMBO) -->
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">
-                <span>DATA RECEBIDO EM:</span>
-                <span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399;">Carimbo</span>
-              </label>
-              <input type="text" 
-                     id="fieldDataRecebimento" 
-                     class="form-input highlight-data" 
-                     placeholder="DD/MM/AAAA" 
-                     autocomplete="off">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">
-                <span>HORA RECEBIMENTO</span>
-              </label>
-              <input type="text" 
-                     id="fieldHoraRecebimento" 
-                     class="form-input" 
-                     placeholder="Ex: 15:37" 
-                     autocomplete="off">
-            </div>
-          </div>
-
-          <!-- RESPONSÁVEL / MATRÍCULA DO CARIMBO -->
+          <!-- 3. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO) -->
           <div class="form-group">
             <label class="form-label">
-              <span>RESPONSÁVEL / MATRÍCULA NO CARIMBO</span>
+              <span>3. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO)</span>
+              <span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa;">Coluna: Observações</span>
             </label>
-            <input type="text" 
-                   id="fieldResponsavel" 
-                   class="form-input" 
-                   placeholder="Ex: Nome do Servidor - Mat. 000.000-0" 
-                   autocomplete="off">
-          </div>
-
-          <!-- PARTES DO PROCESSO (DEMANDANTE E DEMANDADO) -->
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">DEMANDANTE (AUTOR)</label>
-              <input type="text" id="fieldDemandante" class="form-input" placeholder="Parte Autora">
-            </div>
-            <div class="form-group">
-              <label class="form-label">DEMANDADO (RÉU)</label>
-              <input type="text" id="fieldDemandado" class="form-input" placeholder="Parte Ré">
-            </div>
-          </div>
-
-          <!-- VARA / COMARCA E TIPO -->
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">TIPO DE MANDADO</label>
-              <input type="text" id="fieldTipo" class="form-input" placeholder="MANDADO DE NOTIFICAÇÃO">
-            </div>
-            <div class="form-group">
-              <label class="form-label">VARA / COMARCA</label>
-              <input type="text" id="fieldVara" class="form-input" placeholder="1ª Vara da Fazenda Pública...">
-            </div>
+            <input type="text" id="fieldResponsavel" class="form-input"
+              placeholder="Ex: Nome do Servidor - Mat. 000.000-0" autocomplete="off">
           </div>
 
           <!-- BOTÃO DE GRAVAÇÃO NA PLANILHA -->
@@ -253,18 +207,16 @@
         <table class="history-table">
           <thead>
             <tr>
-              <th>Data/Hora Registro</th>
-              <th>Número do Processo</th>
-              <th>Data Recebido</th>
-              <th>Hora</th>
-              <th>Responsável</th>
-              <th>Demandante</th>
+              <th>Data de Autuação</th>
+              <th>Processo Judicial</th>
+              <th>Observações (Recebido por)</th>
               <th>Status Planilha</th>
+              <th>Data/Hora Leitura</th>
             </tr>
           </thead>
           <tbody id="historyTableBody">
             <tr>
-              <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
+              <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
                 Nenhum mandado escaneado nesta sessão.
               </td>
             </tr>
@@ -294,14 +246,13 @@
           <div class="form-group" style="margin-bottom: 1.25rem;">
             <label class="form-label">
               <span>CHAVE DE API DO GOOGLE GEMINI</span>
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--accent-blue); text-decoration: none; font-size: 0.75rem;">
+              <a href="https://aistudio.google.com/app/apikey" target="_blank"
+                style="color: var(--accent-blue); text-decoration: none; font-size: 0.75rem;">
                 Obter Chave Gratuita no Google AI Studio ↗
               </a>
             </label>
-            <input type="password" 
-                   id="cfgGeminiKey" 
-                   class="form-input" 
-                   placeholder="Cole sua GEMINI_API_KEY aqui (começa com AIzaSy...)">
+            <input type="password" id="cfgGeminiKey" class="form-input"
+              placeholder="Cole sua GEMINI_API_KEY aqui (começa com AIzaSy...)">
             <span style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem;">
               Sua chave fica gravada com segurança localmente no arquivo config.json.
             </span>
@@ -312,10 +263,8 @@
             <label class="form-label">
               <span>URL DO WEBHOOK DO GOOGLE APPS SCRIPT</span>
             </label>
-            <input type="url" 
-                   id="cfgWebhookUrl" 
-                   class="form-input" 
-                   placeholder="https://script.google.com/macros/s/SEU_SCRIPT_ID/exec">
+            <input type="url" id="cfgWebhookUrl" class="form-input"
+              placeholder="https://script.google.com/macros/s/SEU_SCRIPT_ID/exec">
             <span style="font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem;">
               URL gerada ao implantar o script na sua planilha Google como aplicativo da web.
             </span>
@@ -325,9 +274,9 @@
           <div class="form-group" style="margin-bottom: 1.25rem;">
             <label class="form-label">MODELO DE IA</label>
             <select id="cfgModelName" class="form-input">
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recomendado - Alta Precisão para Carimbos)</option>
-              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Ultrarrápido)</option>
-              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Recomendado - Rápido e Preciso)</option>
+              <option value="gemini-3-flash-preview">Gemini 3 Flash Preview (Alta Capacidade)</option>
+              <option value="gemini-flash-latest">Gemini Flash Latest</option>
             </select>
           </div>
 
@@ -345,7 +294,8 @@
             Siga os 4 passos abaixo para conectar sua planilha do Google em 1 minuto, sem burocracia do Google Cloud:
           </p>
 
-          <ol style="font-size: 0.85rem; color: var(--text-main); margin-left: 1.25rem; margin-top: 0.5rem; line-height: 1.7;">
+          <ol
+            style="font-size: 0.85rem; color: var(--text-main); margin-left: 1.25rem; margin-top: 0.5rem; line-height: 1.7;">
             <li>Abra a sua planilha do Google no navegador.</li>
             <li>No menu superior, vá em <b>Extensões > Apps Script</b>.</li>
             <li>Apague qualquer código que existir e cole o código abaixo.</li>
@@ -358,8 +308,10 @@
           </ol>
 
           <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Código do Google Apps Script:</span>
-            <button class="btn btn-secondary" id="btnCopyScriptCode" style="font-size: 0.75rem; padding: 0.3rem 0.7rem;">
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Código do Google Apps
+              Script:</span>
+            <button class="btn btn-secondary" id="btnCopyScriptCode"
+              style="font-size: 0.75rem; padding: 0.3rem 0.7rem;">
               📋 Copiar Código Completo
             </button>
           </div>
@@ -380,4 +332,5 @@
   <!-- SCRIPT JS -->
   <script src="/static/app.js"></script>
 </body>
+
 </html>

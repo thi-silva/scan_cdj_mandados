@@ -8,7 +8,7 @@ DEFAULT_CONFIG = {
     "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
     "webhook_url": "https://script.google.com/macros/s/SEU_SCRIPT_ID/exec",
     "spreadsheet_url": "https://docs.google.com/spreadsheets/d/SEU_SPREADSHEET_ID/edit",
-    "model_name": "gemini-2.5-flash",
+    "model_name": "gemini-3.1-flash-lite",
     "port": 8000
 }
 

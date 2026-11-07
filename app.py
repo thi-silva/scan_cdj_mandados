@@ -62,7 +62,7 @@ def get_current_config():
         "masked_gemini_key": masked_key,
         "webhook_url": cfg.get("webhook_url", ""),
         "spreadsheet_url": cfg.get("spreadsheet_url", ""),
-        "model_name": cfg.get("model_name", "gemini-2.5-flash")
+        "model_name": cfg.get("model_name", "gemini-3.1-flash-lite")
     }
 
 @app.post("/api/config")
@@ -93,21 +93,23 @@ def analyze_image_base64(req: AnalyzeBase64Request):
 
     try:
         jpeg_bytes = prepare_image(req.image)
-        extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-2.5-flash"))
+        extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-3.1-flash-lite"))
         
-        # Cria thumbnail miniatura para histórico (max 200px)
-        preview_base64 = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes[:100000]).decode("utf-8")
-        
+        # Retorna os 3 campos na ordem determinada:
+        # 1. Data de Autuação (data_recebimento)
+        # 2. Processo Judicial (numero_processo)
+        # 3. Observações (responsavel)
+        ordered_data = {
+            "data_recebimento": extracted.get("data_recebimento", ""),
+            "numero_processo": extracted.get("numero_processo", ""),
+            "responsavel": extracted.get("responsavel", ""),
+        }
+
         # Salva no banco de dados local
         scan_id = save_scan({
-            "numero_processo": extracted.get("numero_processo", ""),
-            "data_recebimento": extracted.get("data_recebimento", ""),
-            "hora_recebimento": extracted.get("hora_recebimento", ""),
-            "responsavel": extracted.get("responsavel", ""),
-            "demandante": extracted.get("demandante", ""),
-            "demandado": extracted.get("demandado", ""),
-            "tipo_documento": extracted.get("tipo_documento", ""),
-            "vara_comarca": extracted.get("vara_comarca", ""),
+            "data_recebimento": ordered_data["data_recebimento"],
+            "numero_processo": ordered_data["numero_processo"],
+            "responsavel": ordered_data["responsavel"],
             "status_envio": "aguardando_confirmacao",
             "mensagem_retorno": "IA concluiu a leitura com sucesso",
             "imagem_preview": ""
@@ -116,7 +118,7 @@ def analyze_image_base64(req: AnalyzeBase64Request):
         return {
             "success": True,
             "scan_id": scan_id,
-            "data": extracted
+            "data": ordered_data
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -147,17 +149,18 @@ async def upload_and_analyze(file: UploadFile = File(...)):
         jpeg_bytes = content
 
     jpeg_bytes = prepare_image(jpeg_bytes)
-    extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-2.5-flash"))
+    extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-3.1-flash-lite"))
+
+    ordered_data = {
+        "data_recebimento": extracted.get("data_recebimento", ""),
+        "numero_processo": extracted.get("numero_processo", ""),
+        "responsavel": extracted.get("responsavel", ""),
+    }
 
     scan_id = save_scan({
-        "numero_processo": extracted.get("numero_processo", ""),
-        "data_recebimento": extracted.get("data_recebimento", ""),
-        "hora_recebimento": extracted.get("hora_recebimento", ""),
-        "responsavel": extracted.get("responsavel", ""),
-        "demandante": extracted.get("demandante", ""),
-        "demandado": extracted.get("demandado", ""),
-        "tipo_documento": extracted.get("tipo_documento", ""),
-        "vara_comarca": extracted.get("vara_comarca", ""),
+        "data_recebimento": ordered_data["data_recebimento"],
+        "numero_processo": ordered_data["numero_processo"],
+        "responsavel": ordered_data["responsavel"],
         "status_envio": "aguardando_confirmacao",
         "mensagem_retorno": f"Upload realizado: {file.filename}",
         "imagem_preview": ""
@@ -166,7 +169,7 @@ async def upload_and_analyze(file: UploadFile = File(...)):
     return {
         "success": True,
         "scan_id": scan_id,
-        "data": extracted,
+        "data": ordered_data,
         "preview_url": "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("utf-8")
     }
 

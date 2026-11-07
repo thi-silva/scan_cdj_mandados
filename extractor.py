@@ -8,43 +8,39 @@ import io
 
 SYSTEM_INSTRUCTION = """
 Você é um especialista em análise de documentos judiciais e carimbos processuais brasileiros (Mandados de Notificação, Citação, Intimação, etc.).
-Sua tarefa é analisar a imagem fornecida (capturada por câmera ou scanner) e extrair com extrema precisão os dados essenciais para controle processual:
+Sua tarefa é analisar a imagem fornecida (capturada por câmera ou scanner) e extrair EXCLUSIVAMENTE 3 informações, seguindo rigorosamente esta ordem:
 
-1. "numero_processo": O número do processo no padrão CNJ (exemplo: "0001234-56.2026.8.00.0001"). Geralmente localizado próximo a "Processo nº:". Preserve pontuação e dígitos verificadores.
-2. "data_recebimento": A data em que o mandado foi formalmente recebido, identificada especificamente no carimbo de recepção (geralmente no topo ou rodapé, com o texto "RECEBIDO EM: DD/MM/AAAA", muitas vezes manuscrito). Retorne no formato DD/MM/AAAA.
-3. "hora_recebimento": A hora em que foi recebido, se constar no carimbo (exemplo: "14:30" ou "Hora: 14:30").
-4. "responsavel": O nome e matrícula/cargo de quem assinou ou recebeu o carimbo (exemplo: "Nome do Servidor - Mat. 000.000-0 - Cargo").
-5. "tipo_documento": O título do documento (exemplo: "MANDADO DE NOTIFICAÇÃO", "MANDADO DE CITAÇÃO", "MANDADO DE INTIMAÇÃO").
-6. "demandante": A parte autora ou demandante do processo (exemplo: "NOME DA PARTE AUTORA").
-7. "demandado": A parte ré ou demandada (exemplo: "ENTE PÚBLICO OU PARTE RÉ").
-8. "vara_comarca": Juízo ou vara de origem (exemplo: "Juízo da 1ª Vara da Fazenda Pública").
+1. "data_recebimento" (Coluna: Data de Autuação): A data em que o mandado foi recebido, identificada especificamente no carimbo de recepção (geralmente com o texto "RECEBIDO EM: DD/MM/AAAA", muitas vezes manuscrito). Retorne no formato DD/MM/AAAA.
+2. "numero_processo" (Coluna: Processo Judicial): O número do processo judicial no padrão CNJ (exemplo: "0001234-56.2026.8.00.0001"), geralmente localizado próximo a "Processo nº:". Preserve toda a pontuação e dígitos verificadores.
+3. "responsavel" (Coluna: Observações): A pessoa que recebe o documento, identificada no carimbo de recepção (nome, matrícula e/ou cargo de quem assinou ou recebeu no carimbo, exemplo: "Nome do Servidor - Mat. 000.000-0").
 
-Retorne APENAS um JSON válido no formato:
+Retorne APENAS um JSON válido estritamente nesta ordem e com estas 3 chaves:
 {
-  "numero_processo": "...",
   "data_recebimento": "...",
-  "hora_recebimento": "...",
-  "responsavel": "...",
-  "tipo_documento": "...",
-  "demandante": "...",
-  "demandado": "...",
-  "vara_comarca": "...",
-  "confianca": "alta|media|baixa",
-  "observacoes": "..."
+  "numero_processo": "...",
+  "responsavel": "..."
 }
 """
 
-def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gemini-2.5-flash") -> Dict[str, Any]:
+def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gemini-3.1-flash-lite") -> Dict[str, Any]:
     """
     Analisa a imagem utilizando a biblioteca oficial google-genai
     """
     if not api_key:
         raise ValueError("Chave de API do Gemini não configurada. Configure em Configurações.")
 
-    # Corrige nomes de modelos legados/inválidos caso estejam salvos no config.json
-    valid_models = {"gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3-flash-preview"}
-    if model_name not in valid_models:
-        model_name = "gemini-2.5-flash"
+    # Lista de modelos ativos e funcionais para chaves novas do Google AI Studio
+    active_models = [
+        "gemini-3.1-flash-lite",
+        "gemini-3-flash-preview",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+    ]
+    if model_name not in active_models:
+        model_name = "gemini-3.1-flash-lite"
+
+    # Monta fila de tentativa começando pelo modelo escolhido seguido dos fallbacks
+    candidate_models = [model_name] + [m for m in active_models if m != model_name]
 
     from google import genai
     from PIL import Image
@@ -52,10 +48,10 @@ def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gem
     client = genai.Client(api_key=api_key)
 
     prompt = (
-        "Analise atentamente a imagem deste documento judicial. "
-        "Localize o campo 'Processo nº:' para obter o número do processo judicial "
-        "e examine o carimbo de recepção ('RECEBIDO EM') para extrair com precisão a data de recebimento manuscrita/carimbada, "
-        "a hora e o responsável. Extraia também demandante e demandado se visíveis."
+        "Analise atentamente a imagem deste documento judicial e extraia apenas as 3 informações abaixo na seguinte ordem:\n"
+        "1. data_recebimento (Data de Autuação): a data manuscrita ou carimbada dentro do carimbo 'RECEBIDO EM' (formato DD/MM/AAAA).\n"
+        "2. numero_processo (Processo Judicial): o número do processo judicial no padrão CNJ localizado em 'Processo nº:'.\n"
+        "3. responsavel (Observações): o nome/matrícula da pessoa que recebeu o documento conforme consta no carimbo."
     )
 
     # Converte bytes para PIL Image otimizada para o Gemini
@@ -63,32 +59,33 @@ def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gem
     if max(img.size) > 1800:
         img.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=[img, prompt],
-            config={
-                "system_instruction": SYSTEM_INSTRUCTION,
-                "response_mime_type": "application/json",
-                "temperature": 0.1,
-            },
-        )
+    last_error = None
+    for candidate in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=candidate,
+                contents=[img, prompt],
+                config={
+                    "system_instruction": SYSTEM_INSTRUCTION,
+                    "response_mime_type": "application/json",
+                    "temperature": 0.1,
+                },
+            )
 
-        raw_text = response.text.strip()
-        # Limpa blocos de código markdown se houver
-        if raw_text.startswith("```"):
-            raw_text = re.sub(r"^```(?:json)?\n", "", raw_text)
-            raw_text = re.sub(r"\n```$", "", raw_text)
+            raw_text = response.text.strip()
+            # Limpa blocos de código markdown se houver
+            if raw_text.startswith("```"):
+                raw_text = re.sub(r"^```(?:json)?\n", "", raw_text)
+                raw_text = re.sub(r"\n```$", "", raw_text)
 
-        data = json.loads(raw_text)
-        return data
+            data = json.loads(raw_text)
+            return data
 
-    except Exception as e:
-        # Tenta com gemini-2.5-flash-lite caso o modelo principal falhe
-        if model_name != "gemini-2.5-flash-lite":
-            print(f"[Aviso] Tentando fallback para gemini-2.5-flash-lite: {e}")
-            return extract_with_gemini(image_bytes, api_key, model_name="gemini-2.5-flash-lite")
-        raise RuntimeError(f"Erro ao analisar com Gemini: {str(e)}")
+        except Exception as e:
+            last_error = e
+            print(f"[Aviso] Modelo {candidate} falhou, tentando próximo fallback: {e}")
+
+    raise RuntimeError(f"Erro ao analisar com Gemini: {str(last_error)}")
 
 def prepare_image(image_input) -> bytes:
     """

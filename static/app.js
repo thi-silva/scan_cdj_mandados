@@ -10,7 +10,7 @@ const state = {
     has_gemini_key: false,
     webhook_url: '',
     spreadsheet_url: '',
-    model_name: 'gemini-3.5-flash-lite'
+    model_name: 'gemini-3.1-flash-lite'
   }
 };
 
@@ -40,16 +40,12 @@ function doPost(e) {
     if (!sheet) {
       sheet = ss.insertSheet(targetSheetName);
     }
+
+    if (sheet.getLastRow() === 0) {
       var cabecalho = [
-        "Data/Hora Registro",
-        "Número do Processo",
-        "Data de Recebimento",
-        "Hora Recebimento",
-        "Responsável / Matrícula",
-        "Demandante (Autor)",
-        "Demandado (Réu)",
-        "Tipo de Documento",
-        "Vara / Comarca"
+        "Data de Autuação",
+        "Processo Judicial",
+        "Observações"
       ];
       sheet.appendRow(cabecalho);
       var headerRange = sheet.getRange(1, 1, 1, cabecalho.length);
@@ -60,18 +56,11 @@ function doPost(e) {
       sheet.setFrozenRows(1);
     }
 
-    var agora = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
-
+    // Ordem estrita: Data de Autuação, Processo Judicial, Observações
     var novaLinha = [
-      agora,
-      data.numero_processo || "-",
-      data.data_recebimento || "-",
-      data.hora_recebimento || "-",
-      data.responsavel || "-",
-      data.demandante || "-",
-      data.demandado || "-",
-      data.tipo_documento || "-",
-      data.vara_comarca || "-"
+      data.data_autuacao || data.data_recebimento || "-",
+      data.processo_judicial || data.numero_processo || "-",
+      data.observacoes || data.responsavel || "-"
     ];
 
     sheet.appendRow(novaLinha);
@@ -109,19 +98,14 @@ const DOM = {
   fileInput: document.getElementById('fileInput'),
   dropzone: document.getElementById('dropzone'),
   
-  // Painel de Revisão
+  // Painel de Revisão (Ordem: 1. Data de Autuação, 2. Processo Judicial, 3. Observações)
   previewContainer: document.getElementById('previewContainer'),
   thumbPlaceholder: document.getElementById('thumbPlaceholder'),
   capturedImagePreview: document.getElementById('capturedImagePreview'),
   extractBadge: document.getElementById('extractBadge'),
-  fieldProcesso: document.getElementById('fieldProcesso'),
   fieldDataRecebimento: document.getElementById('fieldDataRecebimento'),
-  fieldHoraRecebimento: document.getElementById('fieldHoraRecebimento'),
+  fieldProcesso: document.getElementById('fieldProcesso'),
   fieldResponsavel: document.getElementById('fieldResponsavel'),
-  fieldDemandante: document.getElementById('fieldDemandante'),
-  fieldDemandado: document.getElementById('fieldDemandado'),
-  fieldTipo: document.getElementById('fieldTipo'),
-  fieldVara: document.getElementById('fieldVara'),
   btnCopyProcesso: document.getElementById('btnCopyProcesso'),
   btnSendSheet: document.getElementById('btnSendSheet'),
   btnSendText: document.getElementById('btnSendText'),
@@ -267,6 +251,9 @@ function captureFrameAsBase64() {
 // REALIZA ANÁLISE COM A IA GEMINI
 async function analyzeImage(imageBase64) {
   if (!state.config.has_gemini_key) {
+    await loadConfig();
+  }
+  if (!state.config.has_gemini_key) {
     showToast('Por favor, informe sua Chave de API do Gemini em Configurações (ícone ⚙️ no topo).', 'error', 6000);
     openSettingsModal();
     return;
@@ -322,34 +309,34 @@ async function analyzeImage(imageBase64) {
   }
 }
 
-// PREENCHE OS CAMPOS DO FORMULÁRIO COM OS DADOS DA IA
+// PREENCHE OS CAMPOS DO FORMULÁRIO NA ORDEM DETERMINADA:
+// 1. Data de Autuação (data_recebimento)
+// 2. Processo Judicial (numero_processo)
+// 3. Observações / Pessoa que recebe (responsavel)
 function populateForm(data) {
-  DOM.fieldProcesso.value = data.numero_processo || '';
   DOM.fieldDataRecebimento.value = data.data_recebimento || '';
-  DOM.fieldHoraRecebimento.value = data.hora_recebimento || '';
+  DOM.fieldProcesso.value = data.numero_processo || '';
   DOM.fieldResponsavel.value = data.responsavel || '';
-  DOM.fieldDemandante.value = data.demandante || '';
-  DOM.fieldDemandado.value = data.demandado || '';
-  DOM.fieldTipo.value = data.tipo_documento || 'MANDADO DE NOTIFICAÇÃO';
-  DOM.fieldVara.value = data.vara_comarca || '';
 }
 
-// ENVIA OS DADOS PARA A PLANILHA GOOGLE
+// ENVIA OS DADOS PARA A PLANILHA GOOGLE NA ORDEM: DATA DE AUTUAÇÃO, PROCESSO JUDICIAL, OBSERVAÇÕES
 async function sendToGoogleSheets() {
+  const dataAutuacao = DOM.fieldDataRecebimento.value.trim();
+  const processoJudicial = DOM.fieldProcesso.value.trim();
+  const observacoes = DOM.fieldResponsavel.value.trim();
+
   const dados = {
     nome_aba: "test_scan_cdj",
-    numero_processo: DOM.fieldProcesso.value.trim(),
-    data_recebimento: DOM.fieldDataRecebimento.value.trim(),
-    hora_recebimento: DOM.fieldHoraRecebimento.value.trim(),
-    responsavel: DOM.fieldResponsavel.value.trim(),
-    demandante: DOM.fieldDemandante.value.trim(),
-    demandado: DOM.fieldDemandado.value.trim(),
-    tipo_documento: DOM.fieldTipo.value.trim(),
-    vara_comarca: DOM.fieldVara.value.trim()
+    data_autuacao: dataAutuacao,
+    processo_judicial: processoJudicial,
+    observacoes: observacoes,
+    data_recebimento: dataAutuacao,
+    numero_processo: processoJudicial,
+    responsavel: observacoes
   };
 
-  if (!dados.numero_processo) {
-    showToast('Informe o número do processo antes de enviar!', 'error');
+  if (!dados.processo_judicial) {
+    showToast('Informe o número do processo judicial antes de enviar!', 'error');
     DOM.fieldProcesso.focus();
     return;
   }
@@ -395,7 +382,7 @@ async function loadHistory() {
     if (rows.length === 0) {
       DOM.historyTableBody.innerHTML = `
         <tr>
-          <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
+          <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
             Nenhum mandado escaneado nesta sessão.
           </td>
         </tr>
@@ -417,13 +404,11 @@ async function loadHistory() {
 
       return `
         <tr>
-          <td>${item.timestamp || '-'}</td>
-          <td style="font-weight: 700; color: #60a5fa;">${item.numero_processo || '-'}</td>
           <td style="font-weight: 600; color: #34d399;">${item.data_recebimento || '-'}</td>
-          <td>${item.hora_recebimento || '-'}</td>
+          <td style="font-weight: 700; color: #60a5fa;">${item.numero_processo || '-'}</td>
           <td>${item.responsavel || '-'}</td>
-          <td>${item.demandante || '-'}</td>
           <td><span class="status-pill ${pillClass}">${statusLabel}</span></td>
+          <td style="color: var(--text-dim); font-size: 0.8rem;">${item.timestamp || '-'}</td>
         </tr>
       `;
     }).join('');
@@ -460,7 +445,7 @@ async function loadConfig() {
 
     // Preenche inputs do modal
     DOM.cfgWebhookUrl.value = data.webhook_url || '';
-    DOM.cfgModelName.value = data.model_name || 'gemini-2.5-flash';
+    DOM.cfgModelName.value = data.model_name || 'gemini-3.1-flash-lite';
 
     if (data.spreadsheet_url) {
       DOM.btnOpenSpreadsheet.href = data.spreadsheet_url;
@@ -536,6 +521,9 @@ async function testWebhook() {
 
 // UPLOAD DE ARQUIVO MANUAL (IMAGEM OU PDF)
 async function handleFileUpload(file) {
+  if (!state.config.has_gemini_key) {
+    await loadConfig();
+  }
   if (!state.config.has_gemini_key) {
     showToast('Por favor, informe sua Chave de API do Gemini em Configurações.', 'error');
     openSettingsModal();
@@ -630,14 +618,9 @@ DOM.btnSwitchCamera.addEventListener('click', () => {
 DOM.btnSendSheet.addEventListener('click', sendToGoogleSheets);
 
 DOM.btnClearForm.addEventListener('click', () => {
-  DOM.fieldProcesso.value = '';
   DOM.fieldDataRecebimento.value = '';
-  DOM.fieldHoraRecebimento.value = '';
+  DOM.fieldProcesso.value = '';
   DOM.fieldResponsavel.value = '';
-  DOM.fieldDemandante.value = '';
-  DOM.fieldDemandado.value = '';
-  DOM.fieldTipo.value = '';
-  DOM.fieldVara.value = '';
   DOM.capturedImagePreview.src = '';
   DOM.capturedImagePreview.style.display = 'none';
   DOM.thumbPlaceholder.style.display = 'block';

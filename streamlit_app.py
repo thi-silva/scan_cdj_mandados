@@ -57,7 +57,7 @@ def get_secret_or_cfg(secret_key: str, cfg_key: str, default: str = "") -> str:
 gemini_key = get_secret_or_cfg("GEMINI_API_KEY", "gemini_api_key")
 webhook_url = get_secret_or_cfg("WEBHOOK_URL", "webhook_url")
 spreadsheet_url = get_secret_or_cfg("SPREADSHEET_URL", "spreadsheet_url")
-model_name = "gemini-2.5-flash"
+model_name = "gemini-3.1-flash-lite"
 
 # BARRA LATERAL: CONFIGURAÇÕES
 with st.sidebar:
@@ -140,41 +140,30 @@ if image_to_process:
             st.success("✨ Dados Identificados pela IA:")
             
             with st.form("form_mandado"):
+                data_rec = st.text_input(
+                    "1. 📅 Data de Autuação (Data do Recebimento no Carimbo)",
+                    value=data.get("data_recebimento", "")
+                )
                 num_processo = st.text_input(
-                    "📌 Número do Processo Judicial", 
+                    "2. 📌 Processo Judicial (Número do Processo)", 
                     value=data.get("numero_processo", "")
                 )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    data_rec = st.text_input("📅 Recebido em (Carimbo)", value=data.get("data_recebimento", ""))
-                with col2:
-                    hora_rec = st.text_input("⏰ Hora do Recebimento", value=data.get("hora_recebimento", ""))
-
-                responsavel = st.text_input("👤 Responsável / Matrícula no Carimbo", value=data.get("responsavel", ""))
-                
-                col3, col4 = st.columns(2)
-                with col3:
-                    demandante = st.text_input("Demandante (Autor)", value=data.get("demandante", ""))
-                with col4:
-                    demandado = st.text_input("Demandado (Réu)", value=data.get("demandado", ""))
-
-                tipo_doc = st.text_input("Tipo de Documento", value=data.get("tipo_documento", "MANDADO DE NOTIFICAÇÃO"))
-                vara = st.text_input("Vara / Comarca", value=data.get("vara_comarca", ""))
+                responsavel = st.text_input(
+                    "3. 👤 Observações (Pessoa que Recebe no Carimbo)",
+                    value=data.get("responsavel", "")
+                )
 
                 submit = st.form_submit_button("🚀 Gravar na Planilha Google (aba test_scan_cdj)", type="primary")
 
                 if submit:
                     payload = {
                         "nome_aba": "test_scan_cdj",
-                        "numero_processo": num_processo.strip(),
+                        "data_autuacao": data_rec.strip(),
+                        "processo_judicial": num_processo.strip(),
+                        "observacoes": responsavel.strip(),
                         "data_recebimento": data_rec.strip(),
-                        "hora_recebimento": hora_rec.strip(),
+                        "numero_processo": num_processo.strip(),
                         "responsavel": responsavel.strip(),
-                        "demandante": demandante.strip(),
-                        "demandado": demandado.strip(),
-                        "tipo_documento": tipo_doc.strip(),
-                        "vara_comarca": vara.strip()
                     }
 
                     with st.spinner("Enviando para a Planilha Google..."):

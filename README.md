@@ -13,12 +13,10 @@ Sistema inteligente para leitura automática de **Mandados Judiciais** e **Carim
    - Suporte também a envio de arquivos (imagens JPG/PNG ou PDFs escaneados).
 
 2. **Extração Especializada com IA (Google Gemini)**:
-   - **Número do Processo Judicial**: Extrai no formato padrão CNJ (ex: `0001234-56.2026.8.00.0001`), localizado no campo `Processo nº:`.
-   - **Data de Recebimento**: Leitura precisa da caligrafia ou dígitos dentro do carimbo `RECEBIDO EM: DD/MM/AAAA`.
-   - **Hora do Recebimento**: Leitura da hora no carimbo (ex: `14:30`).
-   - **Responsável / Matrícula**: Identificação do atendente/servidor que recebeu (ex: `Nome do Servidor - Mat. 000.000-0`).
-   - **Partes do Processo**: Demandante (Autor) e Demandado (Réu).
-   - **Tipo e Vara**: Ex: `MANDADO DE NOTIFICAÇÃO`, `1ª Vara da Fazenda Pública`.
+   A IA extrai exclusivamente os 3 campos essenciais na ordem exata de preenchimento da planilha:
+   - **1º `Data de Autuação` (Data do Recebimento)**: Leitura precisa da caligrafia ou dígitos dentro do carimbo `RECEBIDO EM: DD/MM/AAAA`.
+   - **2º `Processo Judicial` (Número do Processo)**: Extrai no formato padrão CNJ (ex: `0001234-56.2026.8.00.0001`), localizado no campo `Processo nº:`.
+   - **3º `Observações` (Pessoa que Recebe)**: Identificação do servidor/responsável que recebeu no carimbo (ex: `Nome do Servidor - Mat. 000.000-0`).
 
 3. **Integração com o Google Sheets**:
    - Gravação instantânea na sua planilha de controle (aba `test_scan_cdj`).
@@ -79,7 +77,8 @@ cdj_scan_mandados/
 ├── google_sheets.py         # Cliente de envio para o Google Sheets via Webhook
 ├── google_apps_script.js    # Código pronto para colar no Apps Script da Planilha
 ├── run.py                   # Inicializador que abre o navegador automaticamente
-├── iniciar.bat              # Atalho de execução para Windows (FastAPI)
+├── iniciar.bat              # Atalho de execução para Windows (FastAPI local)
+├── iniciar_https.bat        # Atalho com Túnel HTTPS e QR Code para Celular
 ├── iniciar_streamlit.bat    # Atalho de execução para Windows (Streamlit)
 ├── requirements.txt         # Dependências do Python
 └── static/

@@ -12,18 +12,23 @@ def send_to_google_sheets(webhook_url: str, payload: Dict[str, Any]) -> Dict[str
         }
 
     try:
-        # Prepara payload formatado para a planilha
+        # Prepara payload na ordem exata das colunas:
+        # 1. Data de Autuação (data_recebimento)
+        # 2. Processo Judicial (numero_processo)
+        # 3. Observações (responsavel)
+        data_autuacao = payload.get("data_autuacao") or payload.get("data_recebimento", "")
+        processo_judicial = payload.get("processo_judicial") or payload.get("numero_processo", "")
+        observacoes = payload.get("observacoes") or payload.get("responsavel", "")
+
         formatted_payload = {
             "nome_aba": payload.get("nome_aba", "test_scan_cdj"),
-            "numero_processo": payload.get("numero_processo", ""),
-            "data_recebimento": payload.get("data_recebimento", ""),
-            "hora_recebimento": payload.get("hora_recebimento", ""),
-            "responsavel": payload.get("responsavel", ""),
-            "demandante": payload.get("demandante", ""),
-            "demandado": payload.get("demandado", ""),
-            "tipo_documento": payload.get("tipo_documento", ""),
-            "vara_comarca": payload.get("vara_comarca", ""),
-            "origem": "ScanJudicial (Câmera IA)"
+            "data_autuacao": data_autuacao,
+            "processo_judicial": processo_judicial,
+            "observacoes": observacoes,
+            # Mantém chaves compatíveis para scripts legados
+            "data_recebimento": data_autuacao,
+            "numero_processo": processo_judicial,
+            "responsavel": observacoes,
         }
 
         response = requests.post(
@@ -76,13 +81,12 @@ def test_webhook_connection(webhook_url: str) -> Dict[str, Any]:
     
     test_payload = {
         "nome_aba": "test_scan_cdj",
-        "numero_processo": "0000000-00.0000.0.00.0000",
+        "data_autuacao": "01/01/2026",
+        "processo_judicial": "0000000-00.0000.0.00.0000",
+        "observacoes": "Teste de Conexão Automático",
         "data_recebimento": "01/01/2026",
-        "hora_recebimento": "00:00",
+        "numero_processo": "0000000-00.0000.0.00.0000",
         "responsavel": "Teste de Conexão Automático",
-        "demandante": "Sistema de Teste",
-        "demandado": "Controle Interno",
-        "tipo_documento": "TESTE DE COMUNICAÇÃO",
         "is_test": True
     }
     return send_to_google_sheets(webhook_url, test_payload)
