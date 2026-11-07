@@ -45,6 +45,7 @@ function doPost(e) {
       var cabecalho = [
         "Data de Autuação",
         "Processo Judicial",
+        "Processo SEI",
         "Observações"
       ];
       sheet.appendRow(cabecalho);
@@ -56,16 +57,17 @@ function doPost(e) {
       sheet.setFrozenRows(1);
     }
 
-    // Ordem estrita: Data de Autuação, Processo Judicial, Observações
+    // Ordem estrita: Data de Autuação, Processo Judicial, Processo SEI, Observações
     var novaLinha = [
       data.data_autuacao || data.data_recebimento || "-",
       data.processo_judicial || data.numero_processo || "-",
+      data.processo_sei || "-",
       data.observacoes || data.responsavel || "-"
     ];
 
     sheet.appendRow(novaLinha);
     var insertedRow = sheet.getLastRow();
-    sheet.getRange(insertedRow, 2).setNumberFormat("@");
+    sheet.getRange(insertedRow, 2, 1, 2).setNumberFormat("@");
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
@@ -98,13 +100,14 @@ const DOM = {
   fileInput: document.getElementById('fileInput'),
   dropzone: document.getElementById('dropzone'),
   
-  // Painel de Revisão (Ordem: 1. Data de Autuação, 2. Processo Judicial, 3. Observações)
+  // Painel de Revisão (Ordem: 1. Data de Autuação, 2. Processo Judicial, 3. Processo SEI, 4. Observações)
   previewContainer: document.getElementById('previewContainer'),
   thumbPlaceholder: document.getElementById('thumbPlaceholder'),
   capturedImagePreview: document.getElementById('capturedImagePreview'),
   extractBadge: document.getElementById('extractBadge'),
   fieldDataRecebimento: document.getElementById('fieldDataRecebimento'),
   fieldProcesso: document.getElementById('fieldProcesso'),
+  fieldProcessoSei: document.getElementById('fieldProcessoSei'),
   fieldResponsavel: document.getElementById('fieldResponsavel'),
   btnCopyProcesso: document.getElementById('btnCopyProcesso'),
   btnSendSheet: document.getElementById('btnSendSheet'),
@@ -312,23 +315,27 @@ async function analyzeImage(imageBase64) {
 // PREENCHE OS CAMPOS DO FORMULÁRIO NA ORDEM DETERMINADA:
 // 1. Data de Autuação (data_recebimento)
 // 2. Processo Judicial (numero_processo)
-// 3. Observações / Pessoa que recebe (responsavel)
+// 3. Processo SEI (processo_sei)
+// 4. Observações / Pessoa que recebe (responsavel)
 function populateForm(data) {
   DOM.fieldDataRecebimento.value = data.data_recebimento || '';
   DOM.fieldProcesso.value = data.numero_processo || '';
+  DOM.fieldProcessoSei.value = data.processo_sei || '';
   DOM.fieldResponsavel.value = data.responsavel || '';
 }
 
-// ENVIA OS DADOS PARA A PLANILHA GOOGLE NA ORDEM: DATA DE AUTUAÇÃO, PROCESSO JUDICIAL, OBSERVAÇÕES
+// ENVIA OS DADOS PARA A PLANILHA GOOGLE NA ORDEM: DATA DE AUTUAÇÃO, PROCESSO JUDICIAL, PROCESSO SEI, OBSERVAÇÕES
 async function sendToGoogleSheets() {
   const dataAutuacao = DOM.fieldDataRecebimento.value.trim();
   const processoJudicial = DOM.fieldProcesso.value.trim();
+  const processoSei = DOM.fieldProcessoSei.value.trim();
   const observacoes = DOM.fieldResponsavel.value.trim();
 
   const dados = {
     nome_aba: "test_scan_cdj",
     data_autuacao: dataAutuacao,
     processo_judicial: processoJudicial,
+    processo_sei: processoSei,
     observacoes: observacoes,
     data_recebimento: dataAutuacao,
     numero_processo: processoJudicial,
@@ -382,7 +389,7 @@ async function loadHistory() {
     if (rows.length === 0) {
       DOM.historyTableBody.innerHTML = `
         <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
+          <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
             Nenhum mandado escaneado nesta sessão.
           </td>
         </tr>
@@ -406,6 +413,7 @@ async function loadHistory() {
         <tr>
           <td style="font-weight: 600; color: #34d399;">${item.data_recebimento || '-'}</td>
           <td style="font-weight: 700; color: #60a5fa;">${item.numero_processo || '-'}</td>
+          <td style="font-weight: 600; color: #fbbf24;">${item.processo_sei || '-'}</td>
           <td>${item.responsavel || '-'}</td>
           <td><span class="status-pill ${pillClass}">${statusLabel}</span></td>
           <td style="color: var(--text-dim); font-size: 0.8rem;">${item.timestamp || '-'}</td>
@@ -620,6 +628,7 @@ DOM.btnSendSheet.addEventListener('click', sendToGoogleSheets);
 DOM.btnClearForm.addEventListener('click', () => {
   DOM.fieldDataRecebimento.value = '';
   DOM.fieldProcesso.value = '';
+  DOM.fieldProcessoSei.value = '';
   DOM.fieldResponsavel.value = '';
   DOM.capturedImagePreview.src = '';
   DOM.capturedImagePreview.style.display = 'none';

@@ -148,8 +148,12 @@ if image_to_process:
                     "2. 📌 Processo Judicial (Número do Processo)", 
                     value=data.get("numero_processo", "")
                 )
+                proc_sei = st.text_input(
+                    "3. 📄 Processo SEI (Anotado no Papel — Final /XXXX-XX)",
+                    value=data.get("processo_sei", "")
+                )
                 responsavel = st.text_input(
-                    "3. 👤 Observações (Pessoa que Recebe no Carimbo)",
+                    "4. 👤 Observações (Pessoa que Recebe no Carimbo)",
                     value=data.get("responsavel", "")
                 )
 
@@ -160,6 +164,7 @@ if image_to_process:
                         "nome_aba": "test_scan_cdj",
                         "data_autuacao": data_rec.strip(),
                         "processo_judicial": num_processo.strip(),
+                        "processo_sei": proc_sei.strip(),
                         "observacoes": responsavel.strip(),
                         "data_recebimento": data_rec.strip(),
                         "numero_processo": num_processo.strip(),

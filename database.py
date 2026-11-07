@@ -13,6 +13,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
             numero_processo TEXT,
+            processo_sei TEXT,
             data_recebimento TEXT,
             hora_recebimento TEXT,
             responsavel TEXT,
@@ -25,6 +26,11 @@ def init_db():
             imagem_preview TEXT
         )
     """)
+    # Garante que a coluna processo_sei exista em bancos já criados anteriormente
+    try:
+        cursor.execute("ALTER TABLE scans ADD COLUMN processo_sei TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -33,13 +39,14 @@ def save_scan(data: Dict[str, Any]) -> int:
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO scans (
-            timestamp, numero_processo, data_recebimento, hora_recebimento,
+            timestamp, numero_processo, processo_sei, data_recebimento, hora_recebimento,
             responsavel, demandante, demandado, tipo_documento, vara_comarca,
             status_envio, mensagem_retorno, imagem_preview
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         data.get("numero_processo", ""),
+        data.get("processo_sei", ""),
         data.get("data_recebimento", ""),
         data.get("hora_recebimento", ""),
         data.get("responsavel", ""),

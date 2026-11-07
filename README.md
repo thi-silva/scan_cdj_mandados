@@ -13,10 +13,11 @@ Sistema inteligente para leitura automática de **Mandados Judiciais** e **Carim
    - Suporte também a envio de arquivos (imagens JPG/PNG ou PDFs escaneados).
 
 2. **Extração Especializada com IA (Google Gemini)**:
-   A IA extrai exclusivamente os 3 campos essenciais na ordem exata de preenchimento da planilha:
+   A IA extrai exclusivamente os 4 campos essenciais na ordem exata de preenchimento da planilha:
    - **1º `Data de Autuação` (Data do Recebimento)**: Leitura precisa da caligrafia ou dígitos dentro do carimbo `RECEBIDO EM: DD/MM/AAAA`.
    - **2º `Processo Judicial` (Número do Processo)**: Extrai no formato padrão CNJ (ex: `0001234-56.2026.8.00.0001`), localizado no campo `Processo nº:`.
-   - **3º `Observações` (Pessoa que Recebe)**: Identificação do servidor/responsável que recebeu no carimbo (ex: `Nome do Servidor - Mat. 000.000-0`).
+   - **3º `Processo SEI` (Número SEI Anotado no Papel)**: Identifica a anotação manuscrita ou impressa na página (inclusive quando escrita na vertical nas margens) terminada em `/XXXX-XX` (ano + 2 dígitos).
+   - **4º `Observações` (Pessoa que Recebe)**: Identificação do servidor/responsável que recebeu no carimbo (ex: `Nome do Servidor - Mat. 000.000-0`).
 
 3. **Integração com o Google Sheets**:
    - Gravação instantânea na sua planilha de controle (aba `test_scan_cdj`).

@@ -139,7 +139,7 @@
           <img id="capturedImagePreview" src="" alt="Captura do Mandado" style="display: none;">
         </div>
 
-        <!-- FORMULÁRIO EDITÁVEL DOS CAMPOS EXTRAÍDOS (ORDEM: DATA DE AUTUAÇÃO -> PROCESSO JUDICIAL -> OBSERVAÇÕES) -->
+        <!-- FORMULÁRIO EDITÁVEL DOS CAMPOS EXTRAÍDOS (ORDEM: DATA DE AUTUAÇÃO -> PROCESSO JUDICIAL -> PROCESSO SEI -> OBSERVAÇÕES) -->
         <form id="extractedForm" class="fields-form" onsubmit="return false;">
 
           <!-- 1. DATA DE AUTUAÇÃO (DATA DO RECEBIMENTO NO CARIMBO) -->
@@ -167,10 +167,20 @@
             </div>
           </div>
 
-          <!-- 3. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO) -->
+          <!-- 3. PROCESSO SEI (ANOTADO NO PAPEL / VERTICAL OU HORIZONTAL) -->
           <div class="form-group">
             <label class="form-label">
-              <span>3. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO)</span>
+              <span>3. PROCESSO SEI (ANOTADO NO PAPEL — FINAL /XXXX-XX)</span>
+              <span class="badge" style="background: rgba(245,158,11,0.15); color: #fbbf24;">Coluna: Processo SEI</span>
+            </label>
+            <input type="text" id="fieldProcessoSei" class="form-input"
+              placeholder="Ex: 00410099.001234/2026-45" autocomplete="off">
+          </div>
+
+          <!-- 4. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO) -->
+          <div class="form-group">
+            <label class="form-label">
+              <span>4. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO)</span>
               <span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa;">Coluna: Observações</span>
             </label>
             <input type="text" id="fieldResponsavel" class="form-input"
@@ -209,6 +219,7 @@
             <tr>
               <th>Data de Autuação</th>
               <th>Processo Judicial</th>
+              <th>Processo SEI</th>
               <th>Observações (Recebido por)</th>
               <th>Status Planilha</th>
               <th>Data/Hora Leitura</th>
@@ -216,7 +227,7 @@
           </thead>
           <tbody id="historyTableBody">
             <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
+              <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
                 Nenhum mandado escaneado nesta sessão.
               </td>
             </tr>

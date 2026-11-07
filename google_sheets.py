@@ -12,20 +12,23 @@ def send_to_google_sheets(webhook_url: str, payload: Dict[str, Any]) -> Dict[str
         }
 
     try:
-        # Prepara payload na ordem exata das colunas:
+        # Prepara payload na ordem exata das 4 colunas:
         # 1. Data de Autuação (data_recebimento)
         # 2. Processo Judicial (numero_processo)
-        # 3. Observações (responsavel)
+        # 3. Processo SEI (processo_sei)
+        # 4. Observações (responsavel)
         data_autuacao = payload.get("data_autuacao") or payload.get("data_recebimento", "")
         processo_judicial = payload.get("processo_judicial") or payload.get("numero_processo", "")
+        processo_sei = payload.get("processo_sei", "")
         observacoes = payload.get("observacoes") or payload.get("responsavel", "")
 
         formatted_payload = {
             "nome_aba": payload.get("nome_aba", "test_scan_cdj"),
             "data_autuacao": data_autuacao,
             "processo_judicial": processo_judicial,
+            "processo_sei": processo_sei,
             "observacoes": observacoes,
-            # Mantém chaves compatíveis para scripts legados
+            # Mantém chaves compatíveis
             "data_recebimento": data_autuacao,
             "numero_processo": processo_judicial,
             "responsavel": observacoes,
@@ -83,6 +86,7 @@ def test_webhook_connection(webhook_url: str) -> Dict[str, Any]:
         "nome_aba": "test_scan_cdj",
         "data_autuacao": "01/01/2026",
         "processo_judicial": "0000000-00.0000.0.00.0000",
+        "processo_sei": "000000/2026-00",
         "observacoes": "Teste de Conexão Automático",
         "data_recebimento": "01/01/2026",
         "numero_processo": "0000000-00.0000.0.00.0000",

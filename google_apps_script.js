@@ -49,11 +49,12 @@ function doPost(e) {
       sheet = ss.insertSheet(targetSheetName);
     }
 
-    // Se a planilha estiver vazia, cria o cabeçalho automaticamente nas 3 colunas definidas
+    // Se a planilha estiver vazia, cria o cabeçalho automaticamente nas 4 colunas definidas
     if (sheet.getLastRow() === 0) {
       var cabecalho = [
         "Data de Autuação",
         "Processo Judicial",
+        "Processo SEI",
         "Observações"
       ];
       sheet.appendRow(cabecalho);
@@ -68,18 +69,20 @@ function doPost(e) {
     // Ordem estrita de preenchimento:
     // 1. Data de Autuação (data do recebimento no carimbo)
     // 2. Processo Judicial (número do processo)
-    // 3. Observações (pessoa que recebe no carimbo)
+    // 3. Processo SEI (número SEI anotado no papel /XXXX-XX)
+    // 4. Observações (pessoa que recebe no carimbo)
     var novaLinha = [
       data.data_autuacao || data.data_recebimento || "-",
       data.processo_judicial || data.numero_processo || "-",
+      data.processo_sei || "-",
       data.observacoes || data.responsavel || "-"
     ];
 
     sheet.appendRow(novaLinha);
     var insertedRow = sheet.getLastRow();
 
-    // Formata o número do processo (Coluna 2) como texto para preservar pontuação e zeros à esquerda
-    sheet.getRange(insertedRow, 2).setNumberFormat("@");
+    // Formata Processo Judicial (Coluna 2) e Processo SEI (Coluna 3) como texto para preservar zeros e barras
+    sheet.getRange(insertedRow, 2, 1, 2).setNumberFormat("@");
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
@@ -87,7 +90,8 @@ function doPost(e) {
       linha_inserida: insertedRow,
       data_autuacao: novaLinha[0],
       processo_judicial: novaLinha[1],
-      observacoes: novaLinha[2]
+      processo_sei: novaLinha[2],
+      observacoes: novaLinha[3]
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (erro) {

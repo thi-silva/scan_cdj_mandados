@@ -95,13 +95,15 @@ def analyze_image_base64(req: AnalyzeBase64Request):
         jpeg_bytes = prepare_image(req.image)
         extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-3.1-flash-lite"))
         
-        # Retorna os 3 campos na ordem determinada:
+        # Retorna os 4 campos na ordem determinada:
         # 1. Data de Autuação (data_recebimento)
         # 2. Processo Judicial (numero_processo)
-        # 3. Observações (responsavel)
+        # 3. Processo SEI (processo_sei)
+        # 4. Observações (responsavel)
         ordered_data = {
             "data_recebimento": extracted.get("data_recebimento", ""),
             "numero_processo": extracted.get("numero_processo", ""),
+            "processo_sei": extracted.get("processo_sei", ""),
             "responsavel": extracted.get("responsavel", ""),
         }
 
@@ -109,6 +111,7 @@ def analyze_image_base64(req: AnalyzeBase64Request):
         scan_id = save_scan({
             "data_recebimento": ordered_data["data_recebimento"],
             "numero_processo": ordered_data["numero_processo"],
+            "processo_sei": ordered_data["processo_sei"],
             "responsavel": ordered_data["responsavel"],
             "status_envio": "aguardando_confirmacao",
             "mensagem_retorno": "IA concluiu a leitura com sucesso",
@@ -154,12 +157,14 @@ async def upload_and_analyze(file: UploadFile = File(...)):
     ordered_data = {
         "data_recebimento": extracted.get("data_recebimento", ""),
         "numero_processo": extracted.get("numero_processo", ""),
+        "processo_sei": extracted.get("processo_sei", ""),
         "responsavel": extracted.get("responsavel", ""),
     }
 
     scan_id = save_scan({
         "data_recebimento": ordered_data["data_recebimento"],
         "numero_processo": ordered_data["numero_processo"],
+        "processo_sei": ordered_data["processo_sei"],
         "responsavel": ordered_data["responsavel"],
         "status_envio": "aguardando_confirmacao",
         "mensagem_retorno": f"Upload realizado: {file.filename}",

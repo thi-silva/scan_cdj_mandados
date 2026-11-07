@@ -7,17 +7,19 @@ from PIL import Image
 import io
 
 SYSTEM_INSTRUCTION = """
-Você é um especialista em análise de documentos judiciais e carimbos processuais brasileiros (Mandados de Notificação, Citação, Intimação, etc.).
-Sua tarefa é analisar a imagem fornecida (capturada por câmera ou scanner) e extrair EXCLUSIVAMENTE 3 informações, seguindo rigorosamente esta ordem:
+Você é um especialista em análise de documentos judiciais, carimbos processuais e anotações manuscritas de protocolo (Mandados de Notificação, Citação, Intimação, etc.).
+Sua tarefa é analisar a imagem fornecida (capturada por câmera ou scanner) e extrair EXCLUSIVAMENTE 4 informações, seguindo rigorosamente esta ordem:
 
 1. "data_recebimento" (Coluna: Data de Autuação): A data em que o mandado foi recebido, identificada especificamente no carimbo de recepção (geralmente com o texto "RECEBIDO EM: DD/MM/AAAA", muitas vezes manuscrito). Retorne no formato DD/MM/AAAA.
 2. "numero_processo" (Coluna: Processo Judicial): O número do processo judicial no padrão CNJ (exemplo: "0001234-56.2026.8.00.0001"), geralmente localizado próximo a "Processo nº:". Preserve toda a pontuação e dígitos verificadores.
-3. "responsavel" (Coluna: Observações): A pessoa que recebe o documento, identificada no carimbo de recepção (nome, matrícula e/ou cargo de quem assinou ou recebeu no carimbo, exemplo: "Nome do Servidor - Mat. 000.000-0").
+3. "processo_sei" (Coluna: Processo SEI): O número do processo SEI anotado no papel (geralmente manuscrito na página, PODENDO ESTAR ESCRITO NA VERTICAL nas margens/laterais ou na horizontal). Ele possui números antes da barra e termina obrigatoriamente na estrutura "/XXXX-XX", onde "XXXX" são 4 dígitos referentes ao ano (ex: 2025, 2026) e "XX" são 2 dígitos finais (exemplos: "00410099.001234/2026-45" ou "123456/2026-12"). Leia com extrema atenção inclusive textos inclinados ou escritos na vertical (90 graus).
+4. "responsavel" (Coluna: Observações): A pessoa que recebe o documento, identificada no carimbo de recepção (nome, matrícula e/ou cargo de quem assinou ou recebeu no carimbo, exemplo: "Nome do Servidor - Mat. 000.000-0").
 
-Retorne APENAS um JSON válido estritamente nesta ordem e com estas 3 chaves:
+Retorne APENAS um JSON válido estritamente nesta ordem e com estas 4 chaves:
 {
   "data_recebimento": "...",
   "numero_processo": "...",
+  "processo_sei": "...",
   "responsavel": "..."
 }
 """
@@ -48,10 +50,11 @@ def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gem
     client = genai.Client(api_key=api_key)
 
     prompt = (
-        "Analise atentamente a imagem deste documento judicial e extraia apenas as 3 informações abaixo na seguinte ordem:\n"
+        "Analise atentamente a imagem deste documento judicial e extraia apenas as 4 informações abaixo na seguinte ordem:\n"
         "1. data_recebimento (Data de Autuação): a data manuscrita ou carimbada dentro do carimbo 'RECEBIDO EM' (formato DD/MM/AAAA).\n"
         "2. numero_processo (Processo Judicial): o número do processo judicial no padrão CNJ localizado em 'Processo nº:'.\n"
-        "3. responsavel (Observações): o nome/matrícula da pessoa que recebeu o documento conforme consta no carimbo."
+        "3. processo_sei (Processo SEI): o número do processo SEI anotado no papel (atenção: pode estar manuscrito na vertical na margem da folha ou na horizontal), que contém números antes da barra e termina no formato '/XXXX-XX' (4 dígitos do ano seguidos de hífen e 2 dígitos).\n"
+        "4. responsavel (Observações): o nome/matrícula da pessoa que recebeu o documento conforme consta no carimbo."
     )
 
     # Converte bytes para PIL Image otimizada para o Gemini
