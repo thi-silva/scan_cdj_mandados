@@ -139,24 +139,24 @@
           <img id="capturedImagePreview" src="" alt="Captura do Mandado" style="display: none;">
         </div>
 
-        <!-- FORMULÁRIO EDITÁVEL DOS CAMPOS EXTRAÍDOS (ORDEM: DATA DE AUTUAÇÃO -> PROCESSO JUDICIAL -> PROCESSO SEI -> OBSERVAÇÕES) -->
+        <!-- FORMULÁRIO EDITÁVEL DOS CAMPOS EXTRAÍDOS (ORDEM: DATA -> JUDICIAL -> SEI) -->
         <form id="extractedForm" class="fields-form" onsubmit="return false;">
 
-          <!-- 1. DATA DE AUTUAÇÃO (DATA DO RECEBIMENTO NO CARIMBO) -->
+          <!-- 1. DATA (DATA DO RECEBIMENTO NO CARIMBO) -->
           <div class="form-group">
             <label class="form-label">
-              <span>1. DATA DE AUTUAÇÃO (RECEBIMENTO NO CARIMBO)</span>
-              <span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399;">Coluna: Data de Autuação</span>
+              <span>1. DATA (RECEBIMENTO NO CARIMBO)</span>
+              <span class="badge" style="background: rgba(16,185,129,0.15); color: #34d399;">Coluna: DATA</span>
             </label>
             <input type="text" id="fieldDataRecebimento" class="form-input highlight-data" placeholder="DD/MM/AAAA"
               autocomplete="off">
           </div>
 
-          <!-- 2. PROCESSO JUDICIAL (NÚMERO DO PROCESSO) -->
+          <!-- 2. JUDICIAL (NÚMERO DO PROCESSO JUDICIAL) -->
           <div class="form-group">
             <label class="form-label">
-              <span>2. PROCESSO JUDICIAL (NÚMERO DO PROCESSO)</span>
-              <span class="badge">Coluna: Processo Judicial</span>
+              <span>2. JUDICIAL (NÚMERO DO PROCESSO)</span>
+              <span class="badge">Coluna: JUDICIAL</span>
             </label>
             <div style="display: flex; gap: 0.5rem;">
               <input type="text" id="fieldProcesso" class="form-input highlight-processo"
@@ -167,24 +167,14 @@
             </div>
           </div>
 
-          <!-- 3. PROCESSO SEI (ANOTADO NO PAPEL / VERTICAL OU HORIZONTAL) -->
+          <!-- 3. SEI (ANOTADO NO PAPEL / VERTICAL OU HORIZONTAL) -->
           <div class="form-group">
             <label class="form-label">
-              <span>3. PROCESSO SEI (ANOTADO NO PAPEL — FINAL /XXXX-XX)</span>
-              <span class="badge" style="background: rgba(245,158,11,0.15); color: #fbbf24;">Coluna: Processo SEI</span>
+              <span>3. SEI (ANOTADO NO PAPEL — FINAL /XXXX-XX)</span>
+              <span class="badge" style="background: rgba(245,158,11,0.15); color: #fbbf24;">Coluna: SEI</span>
             </label>
             <input type="text" id="fieldProcessoSei" class="form-input"
-              placeholder="Ex: 00410099.001234/2026-45" autocomplete="off">
-          </div>
-
-          <!-- 4. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO) -->
-          <div class="form-group">
-            <label class="form-label">
-              <span>4. OBSERVAÇÕES (PESSOA QUE RECEBE NO CARIMBO)</span>
-              <span class="badge" style="background: rgba(139,92,246,0.15); color: #a78bfa;">Coluna: Observações</span>
-            </label>
-            <input type="text" id="fieldResponsavel" class="form-input"
-              placeholder="Ex: Nome do Servidor - Mat. 000.000-0" autocomplete="off">
+              placeholder="Ex: 00610489.001712/2025-06" autocomplete="off">
           </div>
 
           <!-- BOTÃO DE GRAVAÇÃO NA PLANILHA -->
@@ -217,17 +207,16 @@
         <table class="history-table">
           <thead>
             <tr>
-              <th>Data de Autuação</th>
-              <th>Processo Judicial</th>
-              <th>Processo SEI</th>
-              <th>Observações (Recebido por)</th>
+              <th>DATA</th>
+              <th>JUDICIAL</th>
+              <th>SEI</th>
               <th>Status Planilha</th>
               <th>Data/Hora Leitura</th>
             </tr>
           </thead>
           <tbody id="historyTableBody">
             <tr>
-              <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
+              <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
                 Nenhum mandado escaneado nesta sessão.
               </td>
             </tr>

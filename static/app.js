@@ -15,13 +15,13 @@ const state = {
 };
 
 // CÓDIGO DO APPS SCRIPT PARA O TUTORIAL
-const APPS_SCRIPT_SOURCE = `// Nome da aba de destino na sua planilha
-var NOME_DA_ABA = "test_scan_cdj";
+const APPS_SCRIPT_SOURCE = `// Deixe vazio ("") para usar automaticamente a primeira aba da planilha oficial
+var NOME_DA_ABA = "";
 
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
     status: "online",
-    message: "Webhook do ScanJudicial está ativo e gravando na aba " + NOME_DA_ABA + "!"
+    message: "Webhook do ScanJudicial está ativo e conectado à Planilha Oficial!"
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -34,45 +34,47 @@ function doPost(e) {
     var data = JSON.parse(rawContents);
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var targetSheetName = data.nome_aba || NOME_DA_ABA || "test_scan_cdj";
-    var sheet = ss.getSheetByName(targetSheetName);
+    var targetSheetName = data.nome_aba || NOME_DA_ABA;
+    var sheet = targetSheetName ? ss.getSheetByName(targetSheetName) : null;
 
     if (!sheet) {
-      sheet = ss.insertSheet(targetSheetName);
+      sheet = ss.getSheets()[0];
     }
 
     if (sheet.getLastRow() === 0) {
-      var cabecalho = [
-        "Data de Autuação",
-        "Processo Judicial",
-        "Processo SEI",
-        "Observações"
-      ];
-      sheet.appendRow(cabecalho);
-      var headerRange = sheet.getRange(1, 1, 1, cabecalho.length);
-      headerRange.setBackground("#1a365d");
-      headerRange.setFontColor("#ffffff");
-      headerRange.setFontWeight("bold");
-      headerRange.setHorizontalAlignment("center");
-      sheet.setFrozenRows(1);
+      sheet.appendRow([
+        "DATA DE INÍCIO DO PROC. JUDICIAL",
+        "DATA",
+        "JUDICIAL",
+        "SEI",
+        "ÁREA"
+      ]);
     }
 
-    // Ordem estrita: Data de Autuação, Processo Judicial, Processo SEI, Observações
-    var novaLinha = [
-      data.data_autuacao || data.data_recebimento || "-",
-      data.processo_judicial || data.numero_processo || "-",
-      data.processo_sei || "-",
-      data.observacoes || data.responsavel || "-"
-    ];
+    var lastRow = sheet.getLastRow();
+    var targetRow = lastRow + 1;
+    if (lastRow > 1) {
+      var valuesBCD = sheet.getRange(1, 2, lastRow, 3).getValues();
+      for (var i = valuesBCD.length - 1; i >= 0; i--) {
+        if (valuesBCD[i][0] !== "" || valuesBCD[i][1] !== "" || valuesBCD[i][2] !== "") {
+          targetRow = i + 2;
+          break;
+        }
+      }
+    }
 
-    sheet.appendRow(novaLinha);
-    var insertedRow = sheet.getLastRow();
-    sheet.getRange(insertedRow, 2, 1, 2).setNumberFormat("@");
+    var valorData = data.data || data.data_recebimento || "";
+    var valorJudicial = data.judicial || data.numero_processo || "";
+    var valorSei = data.sei || data.processo_sei || "";
+
+    // Preenche apenas as colunas DATA (B), JUDICIAL (C) e SEI (D)
+    sheet.getRange(targetRow, 3, 1, 2).setNumberFormat("@");
+    sheet.getRange(targetRow, 2, 1, 3).setValues([[valorData, valorJudicial, valorSei]]);
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
-      message: "Registro gravado com sucesso na planilha!",
-      linha_inserida: insertedRow
+      message: "Registro gravado com sucesso nas colunas DATA, JUDICIAL e SEI!",
+      linha_inserida: targetRow
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (erro) {
@@ -100,7 +102,7 @@ const DOM = {
   fileInput: document.getElementById('fileInput'),
   dropzone: document.getElementById('dropzone'),
   
-  // Painel de Revisão (Ordem: 1. Data de Autuação, 2. Processo Judicial, 3. Processo SEI, 4. Observações)
+  // Painel de Revisão (Ordem: 1. DATA, 2. JUDICIAL, 3. SEI)
   previewContainer: document.getElementById('previewContainer'),
   thumbPlaceholder: document.getElementById('thumbPlaceholder'),
   capturedImagePreview: document.getElementById('capturedImagePreview'),
@@ -108,7 +110,6 @@ const DOM = {
   fieldDataRecebimento: document.getElementById('fieldDataRecebimento'),
   fieldProcesso: document.getElementById('fieldProcesso'),
   fieldProcessoSei: document.getElementById('fieldProcessoSei'),
-  fieldResponsavel: document.getElementById('fieldResponsavel'),
   btnCopyProcesso: document.getElementById('btnCopyProcesso'),
   btnSendSheet: document.getElementById('btnSendSheet'),
   btnSendText: document.getElementById('btnSendText'),
@@ -313,36 +314,31 @@ async function analyzeImage(imageBase64) {
 }
 
 // PREENCHE OS CAMPOS DO FORMULÁRIO NA ORDEM DETERMINADA:
-// 1. Data de Autuação (data_recebimento)
-// 2. Processo Judicial (numero_processo)
-// 3. Processo SEI (processo_sei)
-// 4. Observações / Pessoa que recebe (responsavel)
+// 1. DATA (data_recebimento)
+// 2. JUDICIAL (numero_processo)
+// 3. SEI (processo_sei)
 function populateForm(data) {
   DOM.fieldDataRecebimento.value = data.data_recebimento || '';
   DOM.fieldProcesso.value = data.numero_processo || '';
   DOM.fieldProcessoSei.value = data.processo_sei || '';
-  DOM.fieldResponsavel.value = data.responsavel || '';
 }
 
-// ENVIA OS DADOS PARA A PLANILHA GOOGLE NA ORDEM: DATA DE AUTUAÇÃO, PROCESSO JUDICIAL, PROCESSO SEI, OBSERVAÇÕES
+// ENVIA OS DADOS PARA A PLANILHA GOOGLE SOMENTE NAS COLUNAS: DATA, JUDICIAL, SEI
 async function sendToGoogleSheets() {
-  const dataAutuacao = DOM.fieldDataRecebimento.value.trim();
-  const processoJudicial = DOM.fieldProcesso.value.trim();
-  const processoSei = DOM.fieldProcessoSei.value.trim();
-  const observacoes = DOM.fieldResponsavel.value.trim();
+  const valorData = DOM.fieldDataRecebimento.value.trim();
+  const valorJudicial = DOM.fieldProcesso.value.trim();
+  const valorSei = DOM.fieldProcessoSei.value.trim();
 
   const dados = {
-    nome_aba: "test_scan_cdj",
-    data_autuacao: dataAutuacao,
-    processo_judicial: processoJudicial,
-    processo_sei: processoSei,
-    observacoes: observacoes,
-    data_recebimento: dataAutuacao,
-    numero_processo: processoJudicial,
-    responsavel: observacoes
+    data: valorData,
+    judicial: valorJudicial,
+    sei: valorSei,
+    data_recebimento: valorData,
+    numero_processo: valorJudicial,
+    processo_sei: valorSei
   };
 
-  if (!dados.processo_judicial) {
+  if (!dados.judicial) {
     showToast('Informe o número do processo judicial antes de enviar!', 'error');
     DOM.fieldProcesso.focus();
     return;
@@ -389,7 +385,7 @@ async function loadHistory() {
     if (rows.length === 0) {
       DOM.historyTableBody.innerHTML = `
         <tr>
-          <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
+          <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">
             Nenhum mandado escaneado nesta sessão.
           </td>
         </tr>
@@ -414,7 +410,6 @@ async function loadHistory() {
           <td style="font-weight: 600; color: #34d399;">${item.data_recebimento || '-'}</td>
           <td style="font-weight: 700; color: #60a5fa;">${item.numero_processo || '-'}</td>
           <td style="font-weight: 600; color: #fbbf24;">${item.processo_sei || '-'}</td>
-          <td>${item.responsavel || '-'}</td>
           <td><span class="status-pill ${pillClass}">${statusLabel}</span></td>
           <td style="color: var(--text-dim); font-size: 0.8rem;">${item.timestamp || '-'}</td>
         </tr>
@@ -629,7 +624,6 @@ DOM.btnClearForm.addEventListener('click', () => {
   DOM.fieldDataRecebimento.value = '';
   DOM.fieldProcesso.value = '';
   DOM.fieldProcessoSei.value = '';
-  DOM.fieldResponsavel.value = '';
   DOM.capturedImagePreview.src = '';
   DOM.capturedImagePreview.style.display = 'none';
   DOM.thumbPlaceholder.style.display = 'block';

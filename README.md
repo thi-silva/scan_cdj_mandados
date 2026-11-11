@@ -13,14 +13,14 @@ Sistema inteligente para leitura automática de **Mandados Judiciais** e **Carim
    - Suporte também a envio de arquivos (imagens JPG/PNG ou PDFs escaneados).
 
 2. **Extração Especializada com IA (Google Gemini)**:
-   A IA extrai exclusivamente os 4 campos essenciais na ordem exata de preenchimento da planilha:
-   - **1º `Data de Autuação` (Data do Recebimento)**: Leitura precisa da caligrafia ou dígitos dentro do carimbo `RECEBIDO EM: DD/MM/AAAA`.
-   - **2º `Processo Judicial` (Número do Processo)**: Extrai no formato padrão CNJ (ex: `0001234-56.2026.8.00.0001`), localizado no campo `Processo nº:`.
-   - **3º `Processo SEI` (Número SEI Anotado no Papel)**: Identifica a anotação manuscrita ou impressa na página (inclusive quando escrita na vertical nas margens) terminada em `/XXXX-XX` (ano + 2 dígitos).
-   - **4º `Observações` (Pessoa que Recebe)**: Identificação do servidor/responsável que recebeu no carimbo (ex: `Nome do Servidor - Mat. 000.000-0`).
+   A IA extrai exclusivamente os 3 campos essenciais na ordem exata de preenchimento da planilha oficial (`DATA DE INÍCIO DO PROC. JUDICIAL`, `DATA`, `JUDICIAL`, `SEI`, `ÁREA`):
+   - **1º Coluna `DATA` (Data do Recebimento)**: Leitura precisa da caligrafia ou dígitos dentro do carimbo `RECEBIDO EM: DD/MM/AAAA`.
+   - **2º Coluna `JUDICIAL` (Número do Processo)**: Extrai no formato padrão CNJ (ex: `0001234-56.2026.8.00.0001`), localizado no campo `Processo nº:`.
+   - **3º Coluna `SEI` (Número SEI Anotado no Papel)**: Identifica a anotação manuscrita ou impressa na página (inclusive quando escrita na vertical nas margens) terminada em `/XXXX-XX` (ano + 2 dígitos).
+   *(Os campos `DATA DE INÍCIO DO PROC. JUDICIAL` e `ÁREA` permanecem disponíveis na planilha sem preenchimento automático neste momento).*
 
 3. **Integração com o Google Sheets**:
-   - Gravação instantânea na sua planilha de controle (aba `test_scan_cdj`).
+   - Gravação instantânea nas colunas **DATA**, **JUDICIAL** e **SEI** da planilha de controle.
    - Implementado via **Google Apps Script Webhook** (sem necessidade de burocracias no Google Cloud Console).
    - Confirmação visual em tela e registro de histórico local no SQLite.
 

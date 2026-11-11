@@ -21,13 +21,14 @@
  * =========================================================================================
  */
 
-// Nome da aba de destino específica na sua planilha
-var NOME_DA_ABA = "test_scan_cdj";
+// Deixe vazio ("") para gravar automaticamente na primeira aba da planilha oficial,
+// ou informe o nome exato da aba caso deseje fixar uma aba específica.
+var NOME_DA_ABA = "";
 
 function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
     status: "online",
-    message: "Webhook do ScanJudicial está ativo e gravando na aba " + NOME_DA_ABA + "!",
+    message: "Webhook do ScanJudicial está ativo e conectado à Planilha Oficial!",
     timestamp: new Date().toISOString()
   })).setMimeType(ContentService.MimeType.JSON);
 }
@@ -42,56 +43,60 @@ function doPost(e) {
     var data = JSON.parse(rawContents);
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var targetSheetName = data.nome_aba || NOME_DA_ABA || "test_scan_cdj";
-    var sheet = ss.getSheetByName(targetSheetName);
+    var targetSheetName = data.nome_aba || NOME_DA_ABA;
+    var sheet = targetSheetName ? ss.getSheetByName(targetSheetName) : null;
 
+    // Se não foi especificado nome de aba (ou se não existir), usa a primeira aba da planilha oficial
     if (!sheet) {
-      sheet = ss.insertSheet(targetSheetName);
+      sheet = ss.getSheets()[0];
     }
 
-    // Se a planilha estiver vazia, cria o cabeçalho automaticamente nas 4 colunas definidas
+    // Se a planilha estiver completamente vazia, cria o cabeçalho padrão de 5 colunas
     if (sheet.getLastRow() === 0) {
       var cabecalho = [
-        "Data de Autuação",
-        "Processo Judicial",
-        "Processo SEI",
-        "Observações"
+        "DATA DE INÍCIO DO PROC. JUDICIAL",
+        "DATA",
+        "JUDICIAL",
+        "SEI",
+        "ÁREA"
       ];
       sheet.appendRow(cabecalho);
-      var headerRange = sheet.getRange(1, 1, 1, cabecalho.length);
-      headerRange.setBackground("#1a365d"); // Azul marinho
-      headerRange.setFontColor("#ffffff");
-      headerRange.setFontWeight("bold");
-      headerRange.setHorizontalAlignment("center");
-      sheet.setFrozenRows(1);
     }
 
-    // Ordem estrita de preenchimento:
-    // 1. Data de Autuação (data do recebimento no carimbo)
-    // 2. Processo Judicial (número do processo)
-    // 3. Processo SEI (número SEI anotado no papel /XXXX-XX)
-    // 4. Observações (pessoa que recebe no carimbo)
-    var novaLinha = [
-      data.data_autuacao || data.data_recebimento || "-",
-      data.processo_judicial || data.numero_processo || "-",
-      data.processo_sei || "-",
-      data.observacoes || data.responsavel || "-"
-    ];
+    // Localiza a próxima linha livre verificando as colunas B (DATA), C (JUDICIAL) e D (SEI)
+    var lastRow = sheet.getLastRow();
+    var targetRow = lastRow + 1;
+    if (lastRow > 1) {
+      var valuesBCD = sheet.getRange(1, 2, lastRow, 3).getValues();
+      for (var i = valuesBCD.length - 1; i >= 0; i--) {
+        if (valuesBCD[i][0] !== "" || valuesBCD[i][1] !== "" || valuesBCD[i][2] !== "") {
+          targetRow = i + 2;
+          break;
+        }
+      }
+    }
 
-    sheet.appendRow(novaLinha);
-    var insertedRow = sheet.getLastRow();
+    var valorData = data.data || data.data_recebimento || data.data_autuacao || "";
+    var valorJudicial = data.judicial || data.numero_processo || data.processo_judicial || "";
+    var valorSei = data.sei || data.processo_sei || "";
 
-    // Formata Processo Judicial (Coluna 2) e Processo SEI (Coluna 3) como texto para preservar zeros e barras
-    sheet.getRange(insertedRow, 2, 1, 2).setNumberFormat("@");
+    // Estrutura das 5 colunas da planilha oficial:
+    // Coluna A (1): DATA DE INÍCIO DO PROC. JUDICIAL -> não preenchido no momento
+    // Coluna B (2): DATA -> Data do recebimento no carimbo
+    // Coluna C (3): JUDICIAL -> Número do processo judicial
+    // Coluna D (4): SEI -> Número do processo SEI
+    // Coluna E (5): ÁREA -> não preenchido no momento
+    sheet.getRange(targetRow, 3, 1, 2).setNumberFormat("@");
+    sheet.getRange(targetRow, 2, 1, 3).setValues([[valorData, valorJudicial, valorSei]]);
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
-      message: "Registro gravado com sucesso na planilha!",
-      linha_inserida: insertedRow,
-      data_autuacao: novaLinha[0],
-      processo_judicial: novaLinha[1],
-      processo_sei: novaLinha[2],
-      observacoes: novaLinha[3]
+      message: "Registro gravado com sucesso nas colunas DATA, JUDICIAL e SEI!",
+      linha_inserida: targetRow,
+      aba: sheet.getName(),
+      data: valorData,
+      judicial: valorJudicial,
+      sei: valorSei
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (erro) {

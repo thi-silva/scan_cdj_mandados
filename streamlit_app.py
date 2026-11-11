@@ -141,41 +141,34 @@ if image_to_process:
             
             with st.form("form_mandado"):
                 data_rec = st.text_input(
-                    "1. 📅 Data de Autuação (Data do Recebimento no Carimbo)",
+                    "1. 📅 DATA (Data do Recebimento no Carimbo)",
                     value=data.get("data_recebimento", "")
                 )
                 num_processo = st.text_input(
-                    "2. 📌 Processo Judicial (Número do Processo)", 
+                    "2. 📌 JUDICIAL (Número do Processo Judicial)", 
                     value=data.get("numero_processo", "")
                 )
                 proc_sei = st.text_input(
-                    "3. 📄 Processo SEI (Anotado no Papel — Final /XXXX-XX)",
+                    "3. 📄 SEI (Anotado no Papel — Final /XXXX-XX)",
                     value=data.get("processo_sei", "")
                 )
-                responsavel = st.text_input(
-                    "4. 👤 Observações (Pessoa que Recebe no Carimbo)",
-                    value=data.get("responsavel", "")
-                )
 
-                submit = st.form_submit_button("🚀 Gravar na Planilha Google (aba test_scan_cdj)", type="primary")
+                submit = st.form_submit_button("🚀 Gravar na Planilha Oficial (DATA, JUDICIAL, SEI)", type="primary")
 
                 if submit:
                     payload = {
-                        "nome_aba": "test_scan_cdj",
-                        "data_autuacao": data_rec.strip(),
-                        "processo_judicial": num_processo.strip(),
-                        "processo_sei": proc_sei.strip(),
-                        "observacoes": responsavel.strip(),
+                        "data": data_rec.strip(),
+                        "judicial": num_processo.strip(),
+                        "sei": proc_sei.strip(),
                         "data_recebimento": data_rec.strip(),
                         "numero_processo": num_processo.strip(),
-                        "responsavel": responsavel.strip(),
+                        "processo_sei": proc_sei.strip(),
                     }
-
                     with st.spinner("Enviando para a Planilha Google..."):
                         res = send_to_google_sheets(webhook_url, payload)
                         if res.get("success"):
                             st.balloons()
-                            st.success("✅ Mandado registrado com sucesso na aba **test_scan_cdj**!")
+                            st.success("✅ Mandado registrado com sucesso nas colunas **DATA, JUDICIAL e SEI**!")
                             st.markdown(f"[👉 Abrir Planilha para Conferir]({spreadsheet_url})")
                         else:
                             st.error(f"Erro ao gravar: {res.get('message')}")
