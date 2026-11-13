@@ -96,26 +96,49 @@
         <div class="capture-actions" style="display: flex; flex-direction: column; gap: 0.6rem;">
           <button class="btn-capture" id="btnCapture">
             <span class="capture-icon">📸</span>
-            <span id="btnCaptureText">Capturar da Câmera Ao Vivo</span>
+            <span id="btnCaptureText">Adicionar Foto da Câmera (0/5)</span>
           </button>
 
           <!-- CAPTURA NATIVA PARA CELULAR / TABLET (FUNCIONA MESMO EM HTTP LOCAL) -->
           <input type="file" id="mobileCameraInput" accept="image/*" capture="environment" style="display: none;">
           <button class="btn btn-secondary" id="btnMobileCamera" type="button"
             style="width: 100%; justify-content: center; padding: 0.75rem; font-weight: 600; border-color: rgba(59, 130, 246, 0.4);">
-            📱 Tirar Foto com Câmera do Celular (Alta Nitidez)
+            📱 Tirar Foto com Câmera do Celular (Adicionar ao Lote)
           </button>
+        </div>
+
+        <!-- FILA / LOTE DE ATÉ 5 DOCUMENTOS -->
+        <div class="batch-queue-box" id="batchQueueBox">
+          <div class="batch-queue-header">
+            <span>📚 Documentos Capturados para Extração</span>
+            <span class="batch-count-badge" id="batchCountBadge">0 / 5</span>
+          </div>
+
+          <div class="batch-thumbs-grid" id="batchThumbsGrid">
+            <div style="grid-column: 1 / -1; text-align: center; font-size: 0.78rem; color: var(--text-dim); padding: 0.75rem 0;">
+              Tire até 5 fotos ou envie arquivos. Depois clique em <b>Extrair Dados</b>.
+            </div>
+          </div>
+
+          <div class="batch-actions-row">
+            <button class="btn btn-primary" id="btnExtractBatch" type="button" style="flex: 1;" disabled>
+              <span id="btnExtractBatchText">✨ Extrair Dados do Lote (0)</span>
+            </button>
+            <button class="btn btn-secondary" id="btnClearBatch" type="button" title="Limpar Lote" disabled>
+              🗑️
+            </button>
+          </div>
         </div>
 
         <!-- DIVISOR ALTERNATIVO -->
         <div class="upload-divider">
-          <span>OU ENVIE UM ARQUIVO</span>
+          <span>OU ENVIE ATÉ 5 ARQUIVOS</span>
         </div>
 
         <!-- DROPZONE PARA UPLOAD (IMAGEM OU PDF) -->
         <div class="file-dropzone" id="dropzone">
-          <input type="file" id="fileInput" accept="image/*,.pdf" style="display: none;">
-          <p>📁 Clique ou arraste uma foto ou PDF do mandado</p>
+          <input type="file" id="fileInput" accept="image/*,.pdf" multiple style="display: none;">
+          <p>📁 Clique ou arraste até 5 fotos ou PDFs dos mandados</p>
           <p class="sub">Formatos aceitos: JPG, PNG, PDF escaneado</p>
         </div>
       </section>
@@ -128,6 +151,17 @@
             <span>Dados Extraídos pela IA</span>
           </div>
           <span class="status-pill pending" id="extractBadge">Aguardando Escaneio</span>
+        </div>
+
+        <!-- BARRA DE NAVEGAÇÃO DO LOTE (QUANDO HÁ MAIS DE 1 DOCUMENTO) -->
+        <div class="batch-nav-bar" id="batchNavBar" style="display: none;">
+          <button class="btn btn-secondary" id="btnPrevDoc" type="button" style="padding: 0.3rem 0.65rem; font-size: 0.75rem;">
+            ◀ Anterior
+          </button>
+          <span id="batchNavLabel">Documento 1 de 1</span>
+          <button class="btn btn-secondary" id="btnNextDoc" type="button" style="padding: 0.3rem 0.65rem; font-size: 0.75rem;">
+            Próximo ▶
+          </button>
         </div>
 
         <!-- MINIATURA DA CAPTURA -->
@@ -178,12 +212,17 @@
           </div>
 
           <!-- BOTÃO DE GRAVAÇÃO NA PLANILHA -->
-          <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem;">
-            <button class="btn btn-success btn-large" id="btnSendSheet" style="flex: 1;" disabled>
-              <span id="btnSendText">🚀 Gravar na Planilha Google</span>
-            </button>
-            <button class="btn btn-secondary" id="btnClearForm" type="button" title="Limpar Formulário">
-              🗑️
+          <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.5rem;">
+            <div style="display: flex; gap: 0.75rem;">
+              <button class="btn btn-success btn-large" id="btnSendSheet" style="flex: 1;" disabled>
+                <span id="btnSendText">🚀 Gravar Este na Planilha</span>
+              </button>
+              <button class="btn btn-secondary" id="btnClearForm" type="button" title="Limpar Formulário">
+                🗑️
+              </button>
+            </div>
+            <button class="btn btn-primary" id="btnSendAllSheet" type="button" style="width: 100%; display: none;">
+              <span id="btnSendAllText">🚀 Gravar Todos Extraídos na Planilha (0)</span>
             </button>
           </div>
         </form>

@@ -1,3 +1,5 @@
+const MAX_BATCH_SIZE = 5;
+
 // ESTADO GLOBAL DA APLICAÇÃO
 const state = {
   currentStream: null,
@@ -6,6 +8,8 @@ const state = {
   lastScanId: null,
   currentExtractedData: null,
   isScanning: false,
+  batchQueue: [],
+  selectedIndex: -1,
   config: {
     has_gemini_key: false,
     webhook_url: '',
@@ -101,6 +105,19 @@ const DOM = {
   mobileCameraInput: document.getElementById('mobileCameraInput'),
   fileInput: document.getElementById('fileInput'),
   dropzone: document.getElementById('dropzone'),
+
+  // Lote (até 5 documentos)
+  batchCountBadge: document.getElementById('batchCountBadge'),
+  batchThumbsGrid: document.getElementById('batchThumbsGrid'),
+  btnExtractBatch: document.getElementById('btnExtractBatch'),
+  btnExtractBatchText: document.getElementById('btnExtractBatchText'),
+  btnClearBatch: document.getElementById('btnClearBatch'),
+  batchNavBar: document.getElementById('batchNavBar'),
+  btnPrevDoc: document.getElementById('btnPrevDoc'),
+  btnNextDoc: document.getElementById('btnNextDoc'),
+  batchNavLabel: document.getElementById('batchNavLabel'),
+  btnSendAllSheet: document.getElementById('btnSendAllSheet'),
+  btnSendAllText: document.getElementById('btnSendAllText'),
   
   // Painel de Revisão (Ordem: 1. DATA, 2. JUDICIAL, 3. SEI)
   previewContainer: document.getElementById('previewContainer'),
@@ -252,8 +269,192 @@ function captureFrameAsBase64() {
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
-// REALIZA ANÁLISE COM A IA GEMINI
-async function analyzeImage(imageBase64) {
+// GESTÃO DO LOTE DE ATÉ 5 DOCUMENTOS
+function renderBatchQueue() {
+  const count = state.batchQueue.length;
+  DOM.batchCountBadge.textContent = `${count} / ${MAX_BATCH_SIZE}`;
+  DOM.btnCaptureText.textContent = `Adicionar Foto da Câmera (${count}/${MAX_BATCH_SIZE})`;
+  DOM.btnCapture.disabled = state.isScanning || count >= MAX_BATCH_SIZE;
+  if (DOM.btnMobileCamera) {
+    DOM.btnMobileCamera.disabled = state.isScanning || count >= MAX_BATCH_SIZE;
+  }
+
+  const pendingCount = state.batchQueue.filter(i => i.status === 'pending' || i.status === 'error').length;
+  DOM.btnExtractBatch.disabled = state.isScanning || count === 0 || pendingCount === 0;
+  DOM.btnClearBatch.disabled = state.isScanning || count === 0;
+
+  if (!state.isScanning) {
+    DOM.btnExtractBatchText.textContent = pendingCount > 0
+      ? `✨ Extrair Dados do Lote (${pendingCount})`
+      : `✨ Todos Extraídos (${count})`;
+  }
+
+  // Atualiza botão "Gravar Todos Extraídos"
+  const readyToSendCount = state.batchQueue.filter(i => i.status === 'extracted').length;
+  if (count > 1 && readyToSendCount > 0) {
+    DOM.btnSendAllSheet.style.display = 'inline-flex';
+    DOM.btnSendAllSheet.disabled = state.isScanning;
+    DOM.btnSendAllText.textContent = `🚀 Gravar Todos Extraídos na Planilha (${readyToSendCount})`;
+  } else {
+    DOM.btnSendAllSheet.style.display = 'none';
+  }
+
+  // Atualiza barra de navegação do painel de revisão
+  if (count > 0 && state.selectedIndex >= 0) {
+    DOM.batchNavBar.style.display = 'flex';
+    DOM.batchNavLabel.textContent = `Documento ${state.selectedIndex + 1} de ${count}`;
+    DOM.btnPrevDoc.disabled = state.selectedIndex <= 0;
+    DOM.btnNextDoc.disabled = state.selectedIndex >= count - 1;
+  } else {
+    DOM.batchNavBar.style.display = 'none';
+  }
+
+  if (count === 0) {
+    DOM.batchThumbsGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; font-size: 0.78rem; color: var(--text-dim); padding: 0.75rem 0;">
+        Tire até 5 fotos ou envie arquivos. Depois clique em <b>Extrair Dados</b>.
+      </div>
+    `;
+    return;
+  }
+
+  const statusLabels = {
+    pending: 'Na fila',
+    extracting: 'Lendo...',
+    extracted: 'Extraído ✓',
+    sent: 'Enviado ✓',
+    error: 'Erro'
+  };
+
+  DOM.batchThumbsGrid.innerHTML = state.batchQueue.map((item, idx) => {
+    const isActive = idx === state.selectedIndex ? 'active' : '';
+    const statusClass = item.status;
+    const thumbContent = item.previewUrl
+      ? `<img src="${item.previewUrl}" alt="Doc ${idx + 1}">`
+      : `<div class="batch-thumb-pdf">📄<br>${item.name || 'PDF'}</div>`;
+
+    return `
+      <div class="batch-thumb-item ${isActive} ${statusClass}" onclick="selectBatchItem(${idx})" title="Documento ${idx + 1}">
+        ${thumbContent}
+        <span class="batch-thumb-index">#${idx + 1}</span>
+        <span class="batch-thumb-status">${statusLabels[item.status] || item.status}</span>
+        ${!state.isScanning ? `<button class="batch-thumb-remove" type="button" onclick="event.stopPropagation(); removeBatchItem(${idx})" title="Remover">&times;</button>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function addBatchItem(item) {
+  if (state.batchQueue.length >= MAX_BATCH_SIZE) {
+    showToast(`Limite máximo de ${MAX_BATCH_SIZE} documentos por lote atingido! Extraia ou limpe o lote atual.`, 'error', 4000);
+    return false;
+  }
+
+  state.batchQueue.push({
+    id: Date.now() + Math.random(),
+    type: item.type, // 'base64' | 'file'
+    imageBase64: item.imageBase64 || null,
+    file: item.file || null,
+    previewUrl: item.previewUrl || null,
+    name: item.name || `Foto ${state.batchQueue.length + 1}`,
+    status: 'pending',
+    scanId: null,
+    data: { data_recebimento: '', numero_processo: '', processo_sei: '' },
+    errorMsg: ''
+  });
+
+  selectBatchItem(state.batchQueue.length - 1);
+  renderBatchQueue();
+  showToast(`Documento ${state.batchQueue.length}/${MAX_BATCH_SIZE} adicionado ao lote!`, 'info', 2000);
+  return true;
+}
+
+window.removeBatchItem = function(index) {
+  if (state.isScanning) return;
+  state.batchQueue.splice(index, 1);
+  if (state.batchQueue.length === 0) {
+    state.selectedIndex = -1;
+    clearReviewPanel();
+  } else {
+    const nextIdx = Math.min(index, state.batchQueue.length - 1);
+    selectBatchItem(nextIdx);
+  }
+  renderBatchQueue();
+};
+
+window.selectBatchItem = function(index) {
+  if (index < 0 || index >= state.batchQueue.length) return;
+  state.selectedIndex = index;
+  const item = state.batchQueue[index];
+
+  state.lastScanId = item.scanId;
+  state.currentExtractedData = item.data;
+
+  if (item.previewUrl) {
+    DOM.capturedImagePreview.src = item.previewUrl;
+    DOM.capturedImagePreview.style.display = 'block';
+    DOM.thumbPlaceholder.style.display = 'none';
+  } else {
+    DOM.capturedImagePreview.src = '';
+    DOM.capturedImagePreview.style.display = 'none';
+    DOM.thumbPlaceholder.innerHTML = `📄 Arquivo selecionado: <b>${item.name}</b>`;
+    DOM.thumbPlaceholder.style.display = 'block';
+  }
+
+  populateForm(item.data || {});
+
+  if (item.status === 'pending') {
+    DOM.extractBadge.className = 'status-pill pending';
+    DOM.extractBadge.textContent = 'Na fila (Aguardando Extração)';
+    DOM.btnSendSheet.disabled = true;
+  } else if (item.status === 'extracting') {
+    DOM.extractBadge.className = 'status-pill pending';
+    DOM.extractBadge.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span> Extraindo dados...';
+    DOM.btnSendSheet.disabled = true;
+  } else if (item.status === 'extracted') {
+    DOM.extractBadge.className = 'status-pill success';
+    DOM.extractBadge.textContent = 'Extração Concluída';
+    DOM.btnSendSheet.disabled = false;
+  } else if (item.status === 'sent') {
+    DOM.extractBadge.className = 'status-pill success';
+    DOM.extractBadge.textContent = 'Gravado na Planilha ✓';
+    DOM.btnSendSheet.disabled = false;
+  } else if (item.status === 'error') {
+    DOM.extractBadge.className = 'status-pill error';
+    DOM.extractBadge.textContent = 'Erro na Leitura';
+    DOM.btnSendSheet.disabled = true;
+  }
+
+  renderBatchQueue();
+};
+
+function clearReviewPanel() {
+  state.lastScanId = null;
+  state.currentExtractedData = null;
+  DOM.fieldDataRecebimento.value = '';
+  DOM.fieldProcesso.value = '';
+  DOM.fieldProcessoSei.value = '';
+  DOM.capturedImagePreview.src = '';
+  DOM.capturedImagePreview.style.display = 'none';
+  DOM.thumbPlaceholder.innerHTML = 'Nenhuma captura realizada ainda.<br>Aponte o documento e clique em <b>Adicionar Foto da Câmera</b>.';
+  DOM.thumbPlaceholder.style.display = 'block';
+  DOM.btnSendSheet.disabled = true;
+  DOM.extractBadge.className = 'status-pill pending';
+  DOM.extractBadge.textContent = 'Aguardando Escaneio';
+}
+
+function clearBatch() {
+  if (state.isScanning) return;
+  state.batchQueue = [];
+  state.selectedIndex = -1;
+  clearReviewPanel();
+  renderBatchQueue();
+}
+
+// EXTRAI TODOS OS DOCUMENTOS DO LOTE SEQUENCIALMENTE
+async function extractBatch() {
+  if (state.batchQueue.length === 0) return;
+
   if (!state.config.has_gemini_key) {
     await loadConfig();
   }
@@ -263,54 +464,93 @@ async function analyzeImage(imageBase64) {
     return;
   }
 
-  // Ativa efeitos visuais de escaneamento
   state.isScanning = true;
   DOM.laserLine.classList.add('scanning');
-  DOM.btnCapture.disabled = true;
-  DOM.btnCaptureText.innerHTML = '<span class="spinner"></span> Analisando com IA...';
-  DOM.extractBadge.className = 'status-pill pending';
-  DOM.extractBadge.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span> Extraindo dados...';
+  DOM.btnExtractBatch.disabled = true;
 
-  // Exibe miniatura
-  DOM.capturedImagePreview.src = imageBase64;
-  DOM.capturedImagePreview.style.display = 'block';
-  DOM.thumbPlaceholder.style.display = 'none';
+  let successCount = 0;
+  let errorCount = 0;
+  const totalToProcess = state.batchQueue.filter(i => i.status === 'pending' || i.status === 'error').length;
+  let processedNow = 0;
 
-  try {
-    const response = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: imageBase64 })
-    });
+  for (let i = 0; i < state.batchQueue.length; i++) {
+    const item = state.batchQueue[i];
+    if (item.status !== 'pending' && item.status !== 'error') continue;
 
-    const result = await response.json();
+    processedNow++;
+    item.status = 'extracting';
+    DOM.btnExtractBatchText.innerHTML = `<span class="spinner"></span> Extraindo ${processedNow} de ${totalToProcess}...`;
+    selectBatchItem(i);
 
-    if (!response.ok) {
-      throw new Error(result.detail || 'Falha na análise do documento');
+    try {
+      let result;
+      if (item.type === 'base64') {
+        const resp = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: item.imageBase64 })
+        });
+        result = await resp.json();
+        if (!resp.ok) throw new Error(result.detail || 'Falha na análise');
+      } else {
+        const formData = new FormData();
+        formData.append('file', item.file);
+        const resp = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        result = await resp.json();
+        if (!resp.ok) throw new Error(result.detail || 'Falha ao processar arquivo');
+        if (result.preview_url) {
+          item.previewUrl = result.preview_url;
+        }
+      }
+
+      item.scanId = result.scan_id;
+      item.data = result.data || { data_recebimento: '', numero_processo: '', processo_sei: '' };
+      item.status = 'extracted';
+      successCount++;
+    } catch (err) {
+      console.error(`Erro no documento ${i + 1}:`, err);
+      item.status = 'error';
+      item.errorMsg = err.message;
+      errorCount++;
     }
 
-    state.lastScanId = result.scan_id;
-    state.currentExtractedData = result.data;
-    populateForm(result.data);
-
-    DOM.extractBadge.className = 'status-pill success';
-    DOM.extractBadge.textContent = 'Extração Concluída';
-    DOM.btnSendSheet.disabled = false;
-
-    showToast('Dados do processo e do carimbo extraídos com sucesso!', 'success');
-    loadHistory();
-
-  } catch (err) {
-    console.error('Erro na análise:', err);
-    DOM.extractBadge.className = 'status-pill error';
-    DOM.extractBadge.textContent = 'Erro na Leitura';
-    showToast(`Erro na análise: ${err.message}`, 'error', 6000);
-  } finally {
-    state.isScanning = false;
-    DOM.laserLine.classList.remove('scanning');
-    DOM.btnCapture.disabled = false;
-    DOM.btnCaptureText.textContent = 'Escanear Documento';
+    if (state.selectedIndex === i) {
+      selectBatchItem(i);
+    } else {
+      renderBatchQueue();
+    }
   }
+
+  state.isScanning = false;
+  DOM.laserLine.classList.remove('scanning');
+  renderBatchQueue();
+  loadHistory();
+
+  // Seleciona o primeiro documento extraído para revisão
+  const firstExtracted = state.batchQueue.findIndex(i => i.status === 'extracted');
+  if (firstExtracted >= 0) {
+    selectBatchItem(firstExtracted);
+  }
+
+  if (errorCount === 0) {
+    showToast(`✅ Extração concluída para ${successCount} documento(s)! Revise e grave na planilha.`, 'success', 5000);
+  } else {
+    showToast(`Extração finalizada: ${successCount} sucesso(s), ${errorCount} erro(s).`, 'error', 6000);
+  }
+}
+
+// SINCRONIZA EDIÇÕES MANUAIS NO FORMULÁRIO COM O ITEM SELECIONADO NO LOTE
+function syncFormToSelectedItem() {
+  if (state.selectedIndex < 0 || state.selectedIndex >= state.batchQueue.length) return;
+  const item = state.batchQueue[state.selectedIndex];
+  item.data = {
+    data_recebimento: DOM.fieldDataRecebimento.value.trim(),
+    numero_processo: DOM.fieldProcesso.value.trim(),
+    processo_sei: DOM.fieldProcessoSei.value.trim()
+  };
 }
 
 // PREENCHE OS CAMPOS DO FORMULÁRIO NA ORDEM DETERMINADA:
@@ -323,8 +563,9 @@ function populateForm(data) {
   DOM.fieldProcessoSei.value = data.processo_sei || '';
 }
 
-// ENVIA OS DADOS PARA A PLANILHA GOOGLE SOMENTE NAS COLUNAS: DATA, JUDICIAL, SEI
+// ENVIA OS DADOS DO DOCUMENTO ATUAL PARA A PLANILHA GOOGLE
 async function sendToGoogleSheets() {
+  syncFormToSelectedItem();
   const valorData = DOM.fieldDataRecebimento.value.trim();
   const valorJudicial = DOM.fieldProcesso.value.trim();
   const valorSei = DOM.fieldProcessoSei.value.trim();
@@ -360,6 +601,10 @@ async function sendToGoogleSheets() {
     const result = await response.json();
 
     if (result.success) {
+      if (state.selectedIndex >= 0 && state.batchQueue[state.selectedIndex]) {
+        state.batchQueue[state.selectedIndex].status = 'sent';
+        selectBatchItem(state.selectedIndex);
+      }
       showToast('Mandado registrado com sucesso na Planilha do Google!', 'success', 5000);
       loadHistory();
     } else {
@@ -371,7 +616,69 @@ async function sendToGoogleSheets() {
     showToast(`Erro de rede ao enviar: ${err.message}`, 'error');
   } finally {
     DOM.btnSendSheet.disabled = false;
-    DOM.btnSendText.textContent = '🚀 Gravar na Planilha Google';
+    DOM.btnSendText.textContent = '🚀 Gravar Este na Planilha';
+    renderBatchQueue();
+  }
+}
+
+// ENVIA TODOS OS DOCUMENTOS EXTRAÍDOS DO LOTE PARA A PLANILHA GOOGLE
+async function sendAllToGoogleSheets() {
+  syncFormToSelectedItem();
+  const pendingItems = state.batchQueue.filter(i => i.status === 'extracted');
+  if (pendingItems.length === 0) return;
+
+  DOM.btnSendAllSheet.disabled = true;
+  let sentCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < state.batchQueue.length; i++) {
+    const item = state.batchQueue[i];
+    if (item.status !== 'extracted') continue;
+
+    DOM.btnSendAllText.innerHTML = `<span class="spinner"></span> Gravando ${sentCount + failCount + 1} de ${pendingItems.length}...`;
+
+    const d = item.data || {};
+    const dados = {
+      data: (d.data_recebimento || '').trim(),
+      judicial: (d.numero_processo || '').trim(),
+      sei: (d.processo_sei || '').trim(),
+      data_recebimento: (d.data_recebimento || '').trim(),
+      numero_processo: (d.numero_processo || '').trim(),
+      processo_sei: (d.processo_sei || '').trim()
+    };
+
+    try {
+      const response = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scan_id: item.scanId,
+          dados: dados
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        item.status = 'sent';
+        sentCount++;
+      } else {
+        failCount++;
+      }
+    } catch (err) {
+      console.error(`Falha ao enviar doc ${i + 1}:`, err);
+      failCount++;
+    }
+    renderBatchQueue();
+  }
+
+  if (state.selectedIndex >= 0) {
+    selectBatchItem(state.selectedIndex);
+  }
+  loadHistory();
+
+  if (failCount === 0) {
+    showToast(`✅ Todos os ${sentCount} documento(s) gravados na Planilha Oficial!`, 'success', 5000);
+  } else {
+    showToast(`Envio em lote: ${sentCount} gravado(s), ${failCount} falha(s).`, 'error', 6000);
   }
 }
 
@@ -522,55 +829,34 @@ async function testWebhook() {
   }
 }
 
-// UPLOAD DE ARQUIVO MANUAL (IMAGEM OU PDF)
-async function handleFileUpload(file) {
-  if (!state.config.has_gemini_key) {
-    await loadConfig();
-  }
-  if (!state.config.has_gemini_key) {
-    showToast('Por favor, informe sua Chave de API do Gemini em Configurações.', 'error');
-    openSettingsModal();
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  DOM.extractBadge.className = 'status-pill pending';
-  DOM.extractBadge.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span> Processando arquivo...';
-
-  try {
-    const resp = await fetch('/api/upload', {
-      method: 'POST',
-      body: formData
-    });
-
-    const result = await resp.json();
-    if (!resp.ok) {
-      throw new Error(result.detail || 'Falha ao processar arquivo');
+// ADICIONA ARQUIVOS (FOTOS OU PDFS) AO LOTE DE ATÉ 5 DOCUMENTOS
+function queueUploadedFiles(fileList) {
+  const files = Array.from(fileList || []);
+  for (const file of files) {
+    if (state.batchQueue.length >= MAX_BATCH_SIZE) {
+      showToast(`Limite de ${MAX_BATCH_SIZE} documentos atingido. Alguns arquivos extras não foram adicionados.`, 'error', 5000);
+      break;
     }
 
-    state.lastScanId = result.scan_id;
-    state.currentExtractedData = result.data;
-    populateForm(result.data);
-
-    if (result.preview_url) {
-      DOM.capturedImagePreview.src = result.preview_url;
-      DOM.capturedImagePreview.style.display = 'block';
-      DOM.thumbPlaceholder.style.display = 'none';
+    if (file.type && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        addBatchItem({
+          type: 'file',
+          file: file,
+          previewUrl: ev.target.result,
+          name: file.name
+        });
+      };
+      reader.readAsDataURL(file);
+    } else {
+      addBatchItem({
+        type: 'file',
+        file: file,
+        previewUrl: null,
+        name: file.name
+      });
     }
-
-    DOM.extractBadge.className = 'status-pill success';
-    DOM.extractBadge.textContent = 'Arquivo Analisado';
-    DOM.btnSendSheet.disabled = false;
-
-    showToast('Documento carregado e analisado pela IA com sucesso!', 'success');
-    loadHistory();
-
-  } catch (err) {
-    showToast(`Erro no upload: ${err.message}`, 'error');
-    DOM.extractBadge.className = 'status-pill error';
-    DOM.extractBadge.textContent = 'Falha no Arquivo';
   }
 }
 
@@ -592,18 +878,39 @@ DOM.btnCapture.addEventListener('click', () => {
     return;
   }
   const frameBase64 = captureFrameAsBase64();
-  analyzeImage(frameBase64);
+  addBatchItem({
+    type: 'base64',
+    imageBase64: frameBase64,
+    previewUrl: frameBase64,
+    name: `Câmera #${state.batchQueue.length + 1}`
+  });
 });
 
 if (DOM.btnMobileCamera && DOM.mobileCameraInput) {
   DOM.btnMobileCamera.addEventListener('click', () => DOM.mobileCameraInput.click());
   DOM.mobileCameraInput.addEventListener('change', (e) => {
     if (e.target.files.length > 0) {
-      handleFileUpload(e.target.files[0]);
+      queueUploadedFiles(e.target.files);
       e.target.value = '';
     }
   });
 }
+
+DOM.btnExtractBatch.addEventListener('click', extractBatch);
+DOM.btnClearBatch.addEventListener('click', clearBatch);
+DOM.btnSendAllSheet.addEventListener('click', sendAllToGoogleSheets);
+
+DOM.btnPrevDoc.addEventListener('click', () => {
+  if (state.selectedIndex > 0) selectBatchItem(state.selectedIndex - 1);
+});
+
+DOM.btnNextDoc.addEventListener('click', () => {
+  if (state.selectedIndex < state.batchQueue.length - 1) selectBatchItem(state.selectedIndex + 1);
+});
+
+[DOM.fieldDataRecebimento, DOM.fieldProcesso, DOM.fieldProcessoSei].forEach(el => {
+  el.addEventListener('input', syncFormToSelectedItem);
+});
 
 DOM.cameraSelect.addEventListener('change', (e) => {
   initCamera(e.target.value);
@@ -646,7 +953,8 @@ DOM.btnRefreshHistory.addEventListener('click', loadHistory);
 DOM.dropzone.addEventListener('click', () => DOM.fileInput.click());
 DOM.fileInput.addEventListener('change', (e) => {
   if (e.target.files.length > 0) {
-    handleFileUpload(e.target.files[0]);
+    queueUploadedFiles(e.target.files);
+    e.target.value = '';
   }
 });
 
@@ -663,7 +971,7 @@ DOM.dropzone.addEventListener('drop', (e) => {
   e.preventDefault();
   DOM.dropzone.style.borderColor = 'var(--border-color)';
   if (e.dataTransfer.files.length > 0) {
-    handleFileUpload(e.dataTransfer.files[0]);
+    queueUploadedFiles(e.dataTransfer.files);
   }
 });
 
