@@ -63,22 +63,35 @@ function doPost(e) {
       sheet.appendRow(cabecalho);
     }
 
-    // Localiza a próxima linha livre verificando as colunas B (DATA), C (JUDICIAL) e D (SEI)
+    // Localiza a próxima linha livre olhando no máximo as últimas 200 linhas das colunas B (DATA), C (JUDICIAL) e D (SEI)
     var lastRow = sheet.getLastRow();
     var targetRow = lastRow + 1;
     if (lastRow > 1) {
-      var valuesBCD = sheet.getRange(1, 2, lastRow, 3).getValues();
+      var startRow = Math.max(1, lastRow - 199);
+      var numRows = lastRow - startRow + 1;
+      var valuesBCD = sheet.getRange(startRow, 2, numRows, 3).getValues();
+      var found = false;
       for (var i = valuesBCD.length - 1; i >= 0; i--) {
         if (valuesBCD[i][0] !== "" || valuesBCD[i][1] !== "" || valuesBCD[i][2] !== "") {
-          targetRow = i + 2;
+          targetRow = startRow + i + 1;
+          found = true;
           break;
         }
       }
+      if (!found && startRow > 1) {
+        targetRow = startRow;
+      }
     }
 
-    var valorData = data.data || data.data_recebimento || data.data_autuacao || "";
-    var valorJudicial = data.judicial || data.numero_processo || data.processo_judicial || "";
-    var valorSei = data.sei || data.processo_sei || "";
+    // Suporta envio em lote (data.rows) ou envio unitário
+    var rowsInput = Array.isArray(data.rows) && data.rows.length > 0 ? data.rows : [data];
+    var rowsToWrite = rowsInput.map(function(item) {
+      return [
+        item.data || item.data_recebimento || item.data_autuacao || "",
+        item.judicial || item.numero_processo || item.processo_judicial || "",
+        item.sei || item.processo_sei || ""
+      ];
+    });
 
     // Estrutura das 5 colunas da planilha oficial:
     // Coluna A (1): DATA DE INÍCIO DO PROC. JUDICIAL -> não preenchido no momento
@@ -86,17 +99,20 @@ function doPost(e) {
     // Coluna C (3): JUDICIAL -> Número do processo judicial
     // Coluna D (4): SEI -> Número do processo SEI
     // Coluna E (5): ÁREA -> não preenchido no momento
-    sheet.getRange(targetRow, 3, 1, 2).setNumberFormat("@");
-    sheet.getRange(targetRow, 2, 1, 3).setValues([[valorData, valorJudicial, valorSei]]);
+    sheet.getRange(targetRow, 3, rowsToWrite.length, 2).setNumberFormat("@");
+    sheet.getRange(targetRow, 2, rowsToWrite.length, 3).setValues(rowsToWrite);
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
-      message: "Registro gravado com sucesso nas colunas DATA, JUDICIAL e SEI!",
+      message: rowsToWrite.length > 1
+        ? rowsToWrite.length + " registros gravados com sucesso nas colunas DATA, JUDICIAL e SEI!"
+        : "Registro gravado com sucesso nas colunas DATA, JUDICIAL e SEI!",
       linha_inserida: targetRow,
+      total_gravado: rowsToWrite.length,
       aba: sheet.getName(),
-      data: valorData,
-      judicial: valorJudicial,
-      sei: valorSei
+      data: rowsToWrite[0][0],
+      judicial: rowsToWrite[0][1],
+      sei: rowsToWrite[0][2]
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (erro) {

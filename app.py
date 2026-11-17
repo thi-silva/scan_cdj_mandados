@@ -2,6 +2,7 @@ import os
 import io
 import json
 import base64
+import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 from config import load_config, save_config
 from database import save_scan, update_scan_status, get_history
 from extractor import extract_with_gemini, prepare_image
-from google_sheets import send_to_google_sheets, test_webhook_connection
+from google_sheets import send_to_google_sheets, send_batch_to_google_sheets, test_webhook_connection
 
 app = FastAPI(title="ScanJudicial - Leitor de Mandados com IA")
 
@@ -38,6 +39,9 @@ class AnalyzeBase64Request(BaseModel):
 class SendToSheetRequest(BaseModel):
     scan_id: Optional[int] = None
     dados: Dict[str, Any]
+
+class SendBatchToSheetRequest(BaseModel):
+    items: list[SendToSheetRequest]
 
 class ConfigUpdateRequest(BaseModel):
     gemini_api_key: Optional[str] = None
@@ -148,8 +152,13 @@ async def upload_and_analyze(file: UploadFile = File(...)):
     else:
         jpeg_bytes = content
 
-    jpeg_bytes = prepare_image(jpeg_bytes)
-    extracted = extract_with_gemini(jpeg_bytes, api_key, cfg.get("model_name", "gemini-3.1-flash-lite"))
+    jpeg_bytes = await asyncio.to_thread(prepare_image, jpeg_bytes)
+    extracted = await asyncio.to_thread(
+        extract_with_gemini,
+        jpeg_bytes,
+        api_key,
+        cfg.get("model_name", "gemini-3.1-flash-lite"),
+    )
 
     ordered_data = {
         "data_recebimento": extracted.get("data_recebimento", ""),
@@ -183,6 +192,21 @@ def send_to_sheet_endpoint(req: SendToSheetRequest):
     if req.scan_id:
         new_status = "enviado" if result.get("success") else "erro"
         update_scan_status(req.scan_id, new_status, result.get("message", ""))
+
+    return result
+
+@app.post("/api/send-batch")
+def send_batch_to_sheet_endpoint(req: SendBatchToSheetRequest):
+    cfg = load_config()
+    webhook_url = cfg.get("webhook_url", "")
+    rows = [item.dados for item in req.items]
+    result = send_batch_to_google_sheets(webhook_url, rows)
+
+    new_status = "enviado" if result.get("success") else "erro"
+    msg = result.get("message", "")
+    for item in req.items:
+        if item.scan_id:
+            update_scan_status(item.scan_id, new_status, msg)
 
     return result
 

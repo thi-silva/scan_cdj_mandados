@@ -36,7 +36,7 @@ def send_to_google_sheets(webhook_url: str, payload: Dict[str, Any]) -> Dict[str
             webhook_url,
             json=formatted_payload,
             headers={"Content-Type": "application/json"},
-            timeout=20,
+            timeout=45,
             allow_redirects=True
         )
 
@@ -62,6 +62,65 @@ def send_to_google_sheets(webhook_url: str, payload: Dict[str, Any]) -> Dict[str
                 "message": f"Erro retornado pelo Google Apps Script (HTTP {response.status_code}): {response.text[:250]}"
             }
 
+    except requests.exceptions.Timeout:
+        return {
+            "success": False,
+            "message": "Tempo limite esgotado ao conectar com a Planilha Google. Verifique sua conexão."
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Falha na comunicação com a planilha: {str(e)}"
+        }
+
+def send_batch_to_google_sheets(webhook_url: str, rows: list) -> Dict[str, Any]:
+    """
+    Envia múltiplos registros em uma única chamada ao Google Apps Script.
+    """
+    if not webhook_url or "script.google.com" not in webhook_url:
+        return {
+            "success": False,
+            "message": "URL do Webhook do Google Apps Script não configurada ou inválida. Veja a aba Configurações."
+        }
+
+    if not rows:
+        return {"success": False, "message": "Nenhum registro para enviar."}
+
+    formatted_rows = []
+    for item in rows:
+        formatted_rows.append({
+            "data": item.get("data") or item.get("data_recebimento") or item.get("data_autuacao", ""),
+            "judicial": item.get("judicial") or item.get("numero_processo") or item.get("processo_judicial", ""),
+            "sei": item.get("sei") or item.get("processo_sei", ""),
+        })
+
+    try:
+        response = requests.post(
+            webhook_url,
+            json={"nome_aba": "", "rows": formatted_rows},
+            headers={"Content-Type": "application/json"},
+            timeout=45,
+            allow_redirects=True
+        )
+
+        if response.status_code in (200, 201, 302):
+            try:
+                res_json = response.json()
+                return {
+                    "success": bool(res_json.get("success", True)),
+                    "message": res_json.get("message", f"{len(formatted_rows)} registro(s) inserido(s) com sucesso!"),
+                    "details": res_json
+                }
+            except Exception:
+                return {
+                    "success": True,
+                    "message": f"{len(formatted_rows)} registro(s) enviado(s) com sucesso!",
+                    "details": response.text[:200]
+                }
+        return {
+            "success": False,
+            "message": f"Erro retornado pelo Google Apps Script (HTTP {response.status_code}): {response.text[:250]}"
+        }
     except requests.exceptions.Timeout:
         return {
             "success": False,

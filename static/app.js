@@ -58,26 +58,40 @@ function doPost(e) {
     var lastRow = sheet.getLastRow();
     var targetRow = lastRow + 1;
     if (lastRow > 1) {
-      var valuesBCD = sheet.getRange(1, 2, lastRow, 3).getValues();
+      var startRow = Math.max(1, lastRow - 199);
+      var numRows = lastRow - startRow + 1;
+      var valuesBCD = sheet.getRange(startRow, 2, numRows, 3).getValues();
+      var found = false;
       for (var i = valuesBCD.length - 1; i >= 0; i--) {
         if (valuesBCD[i][0] !== "" || valuesBCD[i][1] !== "" || valuesBCD[i][2] !== "") {
-          targetRow = i + 2;
+          targetRow = startRow + i + 1;
+          found = true;
           break;
         }
       }
+      if (!found && startRow > 1) {
+        targetRow = startRow;
+      }
     }
 
-    var valorData = data.data || data.data_recebimento || "";
-    var valorJudicial = data.judicial || data.numero_processo || "";
-    var valorSei = data.sei || data.processo_sei || "";
+    var rowsInput = Array.isArray(data.rows) && data.rows.length > 0 ? data.rows : [data];
+    var rowsToWrite = rowsInput.map(function(item) {
+      return [
+        item.data || item.data_recebimento || "",
+        item.judicial || item.numero_processo || "",
+        item.sei || item.processo_sei || ""
+      ];
+    });
 
     // Preenche apenas as colunas DATA (B), JUDICIAL (C) e SEI (D)
-    sheet.getRange(targetRow, 3, 1, 2).setNumberFormat("@");
-    sheet.getRange(targetRow, 2, 1, 3).setValues([[valorData, valorJudicial, valorSei]]);
+    sheet.getRange(targetRow, 3, rowsToWrite.length, 2).setNumberFormat("@");
+    sheet.getRange(targetRow, 2, rowsToWrite.length, 3).setValues(rowsToWrite);
 
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
-      message: "Registro gravado com sucesso nas colunas DATA, JUDICIAL e SEI!",
+      message: rowsToWrite.length > 1
+        ? rowsToWrite.length + " registros gravados com sucesso nas colunas DATA, JUDICIAL e SEI!"
+        : "Registro gravado com sucesso nas colunas DATA, JUDICIAL e SEI!",
       linha_inserida: targetRow
     })).setMimeType(ContentService.MimeType.JSON);
 
@@ -253,12 +267,23 @@ async function enumerateCameras() {
   }
 }
 
-// CAPTURA FRAME DA CÂMERA EM ALTA DEFINIÇÃO
+// CAPTURA FRAME DA CÂMERA OTIMIZADO PARA ENVIO RÁPIDO (MAX 1400PX)
 function captureFrameAsBase64() {
   const video = DOM.video;
   const canvas = DOM.canvas;
-  const width = video.videoWidth || 1280;
-  const height = video.videoHeight || 720;
+  let width = video.videoWidth || 1280;
+  let height = video.videoHeight || 720;
+
+  const maxDim = 1400;
+  if (width > maxDim || height > maxDim) {
+    if (width >= height) {
+      height = Math.round((height * maxDim) / width);
+      width = maxDim;
+    } else {
+      width = Math.round((width * maxDim) / height);
+      height = maxDim;
+    }
+  }
 
   canvas.width = width;
   canvas.height = height;
@@ -266,7 +291,20 @@ function captureFrameAsBase64() {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, width, height);
 
-  return canvas.toDataURL('image/jpeg', 0.92);
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+// PARSER SEGURO DE RESPOSTA JSON (EVITA ERRO "the string did not match the expected pattern" NO SAFARI/iOS)
+async function parseJsonSafe(response) {
+  const text = await response.text();
+  if (!text) {
+    throw new Error(`Resposta vazia do servidor (HTTP ${response.status}).`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`O servidor ou túnel retornou uma resposta inválida (HTTP ${response.status}). Tente novamente.`);
+  }
 }
 
 // GESTÃO DO LOTE DE ATÉ 5 DOCUMENTOS
@@ -451,7 +489,7 @@ function clearBatch() {
   renderBatchQueue();
 }
 
-// EXTRAI TODOS OS DOCUMENTOS DO LOTE SEQUENCIALMENTE
+// EXTRAI TODOS OS DOCUMENTOS DO LOTE EM PARALELO (MUITO MAIS RÁPIDO)
 async function extractBatch() {
   if (state.batchQueue.length === 0) return;
 
@@ -468,61 +506,90 @@ async function extractBatch() {
   DOM.laserLine.classList.add('scanning');
   DOM.btnExtractBatch.disabled = true;
 
-  let successCount = 0;
-  let errorCount = 0;
-  const totalToProcess = state.batchQueue.filter(i => i.status === 'pending' || i.status === 'error').length;
-  let processedNow = 0;
-
+  const targetIndices = [];
   for (let i = 0; i < state.batchQueue.length; i++) {
     const item = state.batchQueue[i];
-    if (item.status !== 'pending' && item.status !== 'error') continue;
+    if (item.status === 'pending' || item.status === 'error') {
+      item.status = 'extracting';
+      targetIndices.push(i);
+    }
+  }
 
-    processedNow++;
-    item.status = 'extracting';
-    DOM.btnExtractBatchText.innerHTML = `<span class="spinner"></span> Extraindo ${processedNow} de ${totalToProcess}...`;
-    selectBatchItem(i);
+  const totalToProcess = targetIndices.length;
+  let completedCount = 0;
+  let successCount = 0;
+  let errorCount = 0;
 
-    try {
-      let result;
-      if (item.type === 'base64') {
-        const resp = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: item.imageBase64 })
-        });
-        result = await resp.json();
-        if (!resp.ok) throw new Error(result.detail || 'Falha na análise');
-      } else {
-        const formData = new FormData();
-        formData.append('file', item.file);
-        const resp = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        result = await resp.json();
-        if (!resp.ok) throw new Error(result.detail || 'Falha ao processar arquivo');
-        if (result.preview_url) {
-          item.previewUrl = result.preview_url;
+  DOM.btnExtractBatchText.innerHTML = `<span class="spinner"></span> Extraindo ${totalToProcess} em paralelo (0/${totalToProcess})...`;
+  renderBatchQueue();
+  if (state.selectedIndex >= 0) {
+    selectBatchItem(state.selectedIndex);
+  }
+
+  const processOne = async (idx) => {
+    const item = state.batchQueue[idx];
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        let result;
+        if (item.type === 'base64') {
+          const resp = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: item.imageBase64 })
+          });
+          result = await parseJsonSafe(resp);
+          if (!resp.ok) throw new Error(result.detail || 'Falha na análise');
+        } else {
+          const formData = new FormData();
+          formData.append('file', item.file);
+          const resp = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+          });
+          result = await parseJsonSafe(resp);
+          if (!resp.ok) throw new Error(result.detail || 'Falha ao processar arquivo');
+          if (result.preview_url) {
+            item.previewUrl = result.preview_url;
+          }
         }
-      }
 
-      item.scanId = result.scan_id;
-      item.data = result.data || { data_recebimento: '', numero_processo: '', processo_sei: '' };
-      item.status = 'extracted';
-      successCount++;
-    } catch (err) {
-      console.error(`Erro no documento ${i + 1}:`, err);
-      item.status = 'error';
-      item.errorMsg = err.message;
-      errorCount++;
+        item.scanId = result.scan_id;
+        item.data = result.data || { data_recebimento: '', numero_processo: '', processo_sei: '' };
+        item.status = 'extracted';
+        successCount++;
+        break;
+      } catch (err) {
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, 800));
+          continue;
+        }
+        console.error(`Erro no documento ${idx + 1}:`, err);
+        item.status = 'error';
+        item.errorMsg = err.message;
+        errorCount++;
+      }
     }
 
-    if (state.selectedIndex === i) {
-      selectBatchItem(i);
+    completedCount++;
+    DOM.btnExtractBatchText.innerHTML = `<span class="spinner"></span> Extraindo (${completedCount}/${totalToProcess})...`;
+    if (state.selectedIndex === idx) {
+      selectBatchItem(idx);
     } else {
       renderBatchQueue();
     }
-  }
+  };
+
+  // Executa até 2 extrações simultâneas para manter alta velocidade sem sobrecarregar o túnel/API
+  const concurrency = 2;
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, targetIndices.length) }, async () => {
+    while (cursor < targetIndices.length) {
+      const nextIdx = targetIndices[cursor++];
+      await processOne(nextIdx);
+    }
+  });
+  await Promise.all(workers);
 
   state.isScanning = false;
   DOM.laserLine.classList.remove('scanning');
@@ -536,7 +603,7 @@ async function extractBatch() {
   }
 
   if (errorCount === 0) {
-    showToast(`✅ Extração concluída para ${successCount} documento(s)! Revise e grave na planilha.`, 'success', 5000);
+    showToast(`✅ Extração paralela concluída para ${successCount} documento(s)!`, 'success', 5000);
   } else {
     showToast(`Extração finalizada: ${successCount} sucesso(s), ${errorCount} erro(s).`, 'error', 6000);
   }
@@ -598,7 +665,7 @@ async function sendToGoogleSheets() {
       })
     });
 
-    const result = await response.json();
+    const result = await parseJsonSafe(response);
 
     if (result.success) {
       if (state.selectedIndex >= 0 && state.batchQueue[state.selectedIndex]) {
@@ -621,64 +688,59 @@ async function sendToGoogleSheets() {
   }
 }
 
-// ENVIA TODOS OS DOCUMENTOS EXTRAÍDOS DO LOTE PARA A PLANILHA GOOGLE
+// ENVIA TODOS OS DOCUMENTOS EXTRAÍDOS DO LOTE PARA A PLANILHA GOOGLE EM UMA ÚNICA REQUISIÇÃO
 async function sendAllToGoogleSheets() {
   syncFormToSelectedItem();
-  const pendingItems = state.batchQueue.filter(i => i.status === 'extracted');
-  if (pendingItems.length === 0) return;
+  const pendingIndices = [];
+  state.batchQueue.forEach((item, idx) => {
+    if (item.status === 'extracted') pendingIndices.push(idx);
+  });
+  if (pendingIndices.length === 0) return;
 
   DOM.btnSendAllSheet.disabled = true;
-  let sentCount = 0;
-  let failCount = 0;
+  DOM.btnSendAllText.innerHTML = `<span class="spinner"></span> Gravando ${pendingIndices.length} registro(s) na planilha...`;
 
-  for (let i = 0; i < state.batchQueue.length; i++) {
-    const item = state.batchQueue[i];
-    if (item.status !== 'extracted') continue;
-
-    DOM.btnSendAllText.innerHTML = `<span class="spinner"></span> Gravando ${sentCount + failCount + 1} de ${pendingItems.length}...`;
-
+  const payloadItems = pendingIndices.map(idx => {
+    const item = state.batchQueue[idx];
     const d = item.data || {};
-    const dados = {
-      data: (d.data_recebimento || '').trim(),
-      judicial: (d.numero_processo || '').trim(),
-      sei: (d.processo_sei || '').trim(),
-      data_recebimento: (d.data_recebimento || '').trim(),
-      numero_processo: (d.numero_processo || '').trim(),
-      processo_sei: (d.processo_sei || '').trim()
-    };
-
-    try {
-      const response = await fetch('/api/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scan_id: item.scanId,
-          dados: dados
-        })
-      });
-      const result = await response.json();
-      if (result.success) {
-        item.status = 'sent';
-        sentCount++;
-      } else {
-        failCount++;
+    return {
+      scan_id: item.scanId,
+      dados: {
+        data: (d.data_recebimento || '').trim(),
+        judicial: (d.numero_processo || '').trim(),
+        sei: (d.processo_sei || '').trim(),
+        data_recebimento: (d.data_recebimento || '').trim(),
+        numero_processo: (d.numero_processo || '').trim(),
+        processo_sei: (d.processo_sei || '').trim()
       }
-    } catch (err) {
-      console.error(`Falha ao enviar doc ${i + 1}:`, err);
-      failCount++;
+    };
+  });
+
+  try {
+    const response = await fetch('/api/send-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: payloadItems })
+    });
+    const result = await parseJsonSafe(response);
+
+    if (result.success) {
+      pendingIndices.forEach(idx => {
+        state.batchQueue[idx].status = 'sent';
+      });
+      showToast(`✅ Todos os ${pendingIndices.length} documento(s) gravados na Planilha Oficial!`, 'success', 5000);
+    } else {
+      showToast(`Aviso da planilha: ${result.message}`, 'error', 7000);
+    }
+  } catch (err) {
+    console.error('Falha no envio em lote:', err);
+    showToast(`Erro de rede no envio em lote: ${err.message}`, 'error', 7000);
+  } finally {
+    if (state.selectedIndex >= 0) {
+      selectBatchItem(state.selectedIndex);
     }
     renderBatchQueue();
-  }
-
-  if (state.selectedIndex >= 0) {
-    selectBatchItem(state.selectedIndex);
-  }
-  loadHistory();
-
-  if (failCount === 0) {
-    showToast(`✅ Todos os ${sentCount} documento(s) gravados na Planilha Oficial!`, 'success', 5000);
-  } else {
-    showToast(`Envio em lote: ${sentCount} gravado(s), ${failCount} falha(s).`, 'error', 6000);
+    loadHistory();
   }
 }
 
@@ -829,8 +891,40 @@ async function testWebhook() {
   }
 }
 
+// REDIMENSIONA E COMPRIME IMAGENS NO NAVEGADOR (REDUZ FOTOS DE 10MB PARA ~180KB ANTES DO ENVIO)
+function compressImageFileToBase64(file, maxDim = 1400, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Falha ao ler imagem'));
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Imagem inválida'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width >= height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // ADICIONA ARQUIVOS (FOTOS OU PDFS) AO LOTE DE ATÉ 5 DOCUMENTOS
-function queueUploadedFiles(fileList) {
+async function queueUploadedFiles(fileList) {
   const files = Array.from(fileList || []);
   for (const file of files) {
     if (state.batchQueue.length >= MAX_BATCH_SIZE) {
@@ -839,16 +933,23 @@ function queueUploadedFiles(fileList) {
     }
 
     if (file.type && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
+      try {
+        const compressedBase64 = await compressImageFileToBase64(file);
+        addBatchItem({
+          type: 'base64',
+          imageBase64: compressedBase64,
+          previewUrl: compressedBase64,
+          name: file.name
+        });
+      } catch (err) {
+        console.warn('Falha ao comprimir no navegador, enviando arquivo original:', err);
         addBatchItem({
           type: 'file',
           file: file,
-          previewUrl: ev.target.result,
+          previewUrl: null,
           name: file.name
         });
-      };
-      reader.readAsDataURL(file);
+      }
     } else {
       addBatchItem({
         type: 'file',

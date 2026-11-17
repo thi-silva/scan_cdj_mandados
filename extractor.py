@@ -22,9 +22,19 @@ Retorne APENAS um JSON válido estritamente nesta ordem e com estas 3 chaves:
 }
 """
 
+_GENAI_CLIENTS: Dict[str, Any] = {}
+
+def _get_genai_client(api_key: str):
+    client = _GENAI_CLIENTS.get(api_key)
+    if client is None:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        _GENAI_CLIENTS[api_key] = client
+    return client
+
 def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gemini-3.1-flash-lite") -> Dict[str, Any]:
     """
-    Analisa a imagem utilizando a biblioteca oficial google-genai
+    Analisa a imagem utilizando a biblioteca oficial google-genai com baixa latência
     """
     if not api_key:
         raise ValueError("Chave de API do Gemini não configurada. Configure em Configurações.")
@@ -42,34 +52,36 @@ def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gem
     # Monta fila de tentativa começando pelo modelo escolhido seguido dos fallbacks
     candidate_models = [model_name] + [m for m in active_models if m != model_name]
 
-    from google import genai
-    from PIL import Image
+    from google.genai import types
 
-    client = genai.Client(api_key=api_key)
+    client = _get_genai_client(api_key)
 
     prompt = (
-        "Analise atentamente a imagem deste documento judicial e extraia apenas as 3 informações abaixo na seguinte ordem:\n"
-        "1. data_recebimento (Coluna DATA): a data manuscrita ou carimbada dentro do carimbo 'RECEBIDO EM' (formato DD/MM/AAAA).\n"
-        "2. numero_processo (Coluna JUDICIAL): o número do processo judicial no padrão CNJ localizado em 'Processo nº:'.\n"
-        "3. processo_sei (Coluna SEI): o número do processo SEI anotado no papel (atenção: pode estar manuscrito na vertical na margem da folha ou na horizontal), que contém números antes da barra e termina no formato '/XXXX-XX' (4 dígitos do ano seguidos de hífen e 2 dígitos)."
+        "Extraia em JSON estrito na ordem: "
+        "1. data_recebimento (carimbo 'RECEBIDO EM', formato DD/MM/AAAA); "
+        "2. numero_processo ('Processo nº:' padrão CNJ); "
+        "3. processo_sei (anotado na página, inclusive na vertical, formato .../XXXX-XX)."
     )
 
-    # Converte bytes para PIL Image otimizada para o Gemini
-    img = Image.open(io.BytesIO(image_bytes))
-    if max(img.size) > 1800:
-        img.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
+    # Garante imagem otimizada (max 1400px) enviada diretamente como JPEG bytes sem re-encodar para PNG
+    img_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
 
     last_error = None
     for candidate in candidate_models:
         try:
+            config_kwargs: Dict[str, Any] = {
+                "system_instruction": SYSTEM_INSTRUCTION,
+                "response_mime_type": "application/json",
+                "temperature": 0.1,
+            }
+            # Desabilita thinking nos modelos Gemini 3/3.1 para resposta quase instantânea
+            if candidate.startswith("gemini-3"):
+                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+
             response = client.models.generate_content(
                 model=candidate,
-                contents=[img, prompt],
-                config={
-                    "system_instruction": SYSTEM_INSTRUCTION,
-                    "response_mime_type": "application/json",
-                    "temperature": 0.1,
-                },
+                contents=[img_part, prompt],
+                config=types.GenerateContentConfig(**config_kwargs),
             )
 
             raw_text = response.text.strip()
@@ -89,7 +101,7 @@ def extract_with_gemini(image_bytes: bytes, api_key: str, model_name: str = "gem
 
 def prepare_image(image_input) -> bytes:
     """
-    Converte base64 data URL, bytes ou PIL Image para JPEG bytes otimizados
+    Converte base64 data URL, bytes ou PIL Image para JPEG bytes otimizados (rápido para envio e IA)
     """
     if isinstance(image_input, str):
         if "base64," in image_input:
@@ -105,11 +117,11 @@ def prepare_image(image_input) -> bytes:
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
     
-    # Redimensiona se for excessivamente grande (> 2500px) para acelerar transferência mantendo nitidez perfeita
-    max_dim = 2500
+    # Redimensiona para até 1400px (nitidez excelente para texto/carimbos e ~4x mais rápido na rede e na IA)
+    max_dim = 1400
     if max(img.size) > max_dim:
         img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
     output = io.BytesIO()
-    img.save(output, format="JPEG", quality=90)
+    img.save(output, format="JPEG", quality=82, optimize=True)
     return output.getvalue()
